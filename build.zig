@@ -3,46 +3,48 @@
 
 const std = @import("std");
 
-pub fn build(b: *std.build.Builder) !void {
-    const windows = b.addStaticLibrary("mqtt-c", null);
-    try includeCommon(windows);
-    windows.setTarget(std.zig.CrossTarget{
-        .cpu_arch = .x86_64,
-        .os_tag = .windows,
-    });
-    windows.install();
+pub fn build(b: *std.Build) !void {
+    const optimize = b.standardOptimizeOption(.{});
 
-    const apple_silicon_mac = b.addStaticLibrary("mqtt-c-apple-silicon", null);
-    try includeCommon(apple_silicon_mac);
-    apple_silicon_mac.setTarget(std.zig.CrossTarget{
-        .cpu_arch = .aarch64,
-        .os_tag = .macos,
-    });
-    apple_silicon_mac.install();
+    const windows = try addPlatformLibrary(
+        b,
+        "mqtt-c",
+        .{ .cpu_arch = .x86_64, .os_tag = .windows },
+        optimize,
+    );
+    b.installArtifact(windows);
 
-    const x86_64_mac = b.addStaticLibrary("mqtt-c-mac-x64", null);
-    try includeCommon(x86_64_mac);
-    x86_64_mac.setTarget(std.zig.CrossTarget{
-        .cpu_arch = .x86_64,
-        .os_tag = .macos,
-    });
-    x86_64_mac.install();
+    const apple_silicon_mac = try addPlatformLibrary(
+        b,
+        "mqtt-c-apple-silicon",
+        .{ .cpu_arch = .aarch64, .os_tag = .macos },
+        optimize,
+    );
+    b.installArtifact(apple_silicon_mac);
 
-    const x86_64_linux = b.addStaticLibrary("mqtt-c-x64", null);
-    try includeCommon(x86_64_linux);
-    x86_64_linux.setTarget(std.zig.CrossTarget{
-        .cpu_arch = .x86_64,
-        .os_tag = .linux,
-    });
-    x86_64_linux.install();
+    const x86_64_mac = try addPlatformLibrary(
+        b,
+        "mqtt-c-mac-x64",
+        .{ .cpu_arch = .x86_64, .os_tag = .macos },
+        optimize,
+    );
+    b.installArtifact(x86_64_mac);
 
-    const arm64_linux = b.addStaticLibrary("mqtt-c-arm64", null);
-    try includeCommon(arm64_linux);
-    arm64_linux.setTarget(std.zig.CrossTarget{
-        .cpu_arch = .aarch64,
-        .os_tag = .linux,
-    });
-    arm64_linux.install();
+    const x86_64_linux = try addPlatformLibrary(
+        b,
+        "mqtt-c-x64",
+        .{ .cpu_arch = .x86_64, .os_tag = .linux },
+        optimize,
+    );
+    b.installArtifact(x86_64_linux);
+
+    const arm64_linux = try addPlatformLibrary(
+        b,
+        "mqtt-c-arm64",
+        .{ .cpu_arch = .aarch64, .os_tag = .linux },
+        optimize,
+    );
+    b.installArtifact(arm64_linux);
 
     const windows_step = b.step("windows", "Build for Windows");
     windows_step.dependOn(&windows.step);
@@ -60,30 +62,62 @@ pub fn build(b: *std.build.Builder) !void {
     arm64_linux_step.dependOn(&arm64_linux.step);
 }
 
-fn includeCommon(lib: *std.build.LibExeObjStep) !void {
-    lib.addIncludeDir("include");
+fn addPlatformLibrary(
+    b: *std.Build,
+    name: []const u8,
+    target_query: std.Target.Query,
+    optimize: std.builtin.OptimizeMode,
+) !*std.Build.Step.Compile {
+    const module = b.createModule(.{
+        .target = b.resolveTargetQuery(target_query),
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    try includeCommon(b, module, optimize);
 
-    var flags = std.ArrayList([]const u8).init(std.heap.page_allocator);
-    try flags.appendSlice(&.{
+    return b.addLibrary(.{
+        .name = name,
+        .root_module = module,
+    });
+}
+
+fn includeCommon(
+    b: *std.Build,
+    module: *std.Build.Module,
+    optimize: std.builtin.OptimizeMode,
+) !void {
+    module.addIncludePath(b.path("include"));
+
+    const target = module.resolved_target orelse @panic("target missing");
+
+    const common_flags: []const []const u8 = &.{
         "-std=c23",
         "-Wall",
         "-Wextra",
         "-Wpedantic",
         "-Werror",
         "-D_POSIX_C_SOURCE=200809L",
+    };
+
+    const debug_flags: []const []const u8 = &.{
+        "-std=c23",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Werror",
+        "-D_POSIX_C_SOURCE=200809L",
+        "-fsanitize=address",
+        "-fsanitize=undefined",
+        "-fsanitize=leak",
+    };
+
+    const cflags = if (optimize == .Debug and target.result.os.tag != .windows)
+        debug_flags
+    else
+        common_flags;
+
+    module.addCSourceFiles(.{
+        .files = &.{ "src/mqtt.c", "src/mqtt_pal.c" },
+        .flags = cflags,
     });
-    if (lib.root_module.optimize == .Debug) {
-        try flags.appendSlice(&.{
-            "-fsanitize=address",
-            "-fsanitize=undefined",
-            "-fsanitize=leak",
-        });
-    }
-    const cflags = try flags.toOwnedSlice();
-
-    lib.addCSourceFile("src/mqtt.c", cflags);
-    lib.addCSourceFile("src/mqtt_pal.c", cflags);
-
-    lib.setBuildMode(.Debug); // Can be .Debug, .ReleaseSafe, .ReleaseFast, and .ReleaseSmall
-    lib.linkLibC();
 }

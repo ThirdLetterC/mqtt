@@ -121,7 +121,7 @@ extern "C" {
             typedef int mqtt_pal_socket_handle;
         #endif
     #endif
-#elif defined(_MSC_VER) || defined(WIN32)
+#elif defined(_MSC_VER) || defined(WIN32) || defined(_WIN32)
     #include <limits.h>
     #include <winsock2.h>
     #include <windows.h>
