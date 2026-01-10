@@ -41,6 +41,8 @@ check: build-tests
 format:
     clang-format -i --style=file src/*.c include/mqtt.h examples/*.c examples/templates/*.h tests.c
 
+fmt: format
+
 clean:
     rm -rf {{bindir}} zig-out .zig-cache *.o
 

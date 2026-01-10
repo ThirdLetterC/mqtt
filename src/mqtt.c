@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include <mqtt.h>
 
-
 constexpr uint16_t MQTT_PID_LFSR_SEED = 163u;
 constexpr uint16_t MQTT_PID_LFSR_POLY = 0xB400u;
 constexpr int MQTT_DEFAULT_RESPONSE_TIMEOUT = 30;
@@ -33,13 +32,15 @@ constexpr double MQTT_RESPONSE_SMOOTHING_ALPHA = 0.875;
 constexpr double MQTT_RESPONSE_SMOOTHING_BETA = 0.125;
 constexpr uint32_t MQTT_MAX_REMAINING_LENGTH = 268'435'456u;
 
-[[nodiscard]] static inline bool mqtt_bitfield_rule_violation(
-    uint8_t bitfield, uint8_t rule_value, uint8_t rule_mask) {
+[[nodiscard]] static inline bool
+mqtt_bitfield_rule_violation(uint8_t bitfield, uint8_t rule_value,
+                             uint8_t rule_mask) {
   return ((bitfield ^ rule_value) & rule_mask) != 0u;
 }
 
-static inline void mqtt_update_typical_response_time(
-    struct mqtt_client *client, mqtt_pal_time_t sent_time) {
+static inline void
+mqtt_update_typical_response_time(struct mqtt_client *client,
+                                  mqtt_pal_time_t sent_time) {
   const double response_time = (double)(MQTT_PAL_TIME() - sent_time);
   if (client->typical_response_time == MQTT_UNKNOWN_RESPONSE_TIME) {
     client->typical_response_time = response_time;

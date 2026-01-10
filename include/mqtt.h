@@ -1160,8 +1160,7 @@ mqtt_mq_get(const struct mqtt_message_queue *mq_ptr, ptrdiff_t index) {
  */
 [[nodiscard]] static inline ptrdiff_t
 mqtt_mq_length(const struct mqtt_message_queue *mq_ptr) {
-  return ((struct mqtt_queued_message *)(mq_ptr->mem_end)) -
-         mq_ptr->queue_tail;
+  return ((struct mqtt_queued_message *)(mq_ptr->mem_end)) - mq_ptr->queue_tail;
 }
 
 /**
