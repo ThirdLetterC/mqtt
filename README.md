@@ -66,10 +66,9 @@ The @ref pal documentation contains everything you should need to port MQTT-C to
 and the other modules contain documentation for MQTT-C developers.
 
 ## Testing and Building the Tests
-The MQTT-C unit tests use the [cmocka unit testing framework](https://cmocka.org/). 
-Therefore, [cmocka](https://cmocka.org/) *must* be installed on your machine to build and run 
-the unit tests. For convenience, a simple `"makefile"` is included to build the unit tests and 
-examples on UNIX-like machines. The unit tests and examples can be built as follows:
+The MQTT-C unit tests use a lightweight built-in harness, so no external testing framework is 
+required. For convenience, a simple `"makefile"` is included to build the unit tests and examples 
+on UNIX-like machines. The unit tests and examples can be built as follows:
 ```bash
     $ make all
 ``` 
@@ -103,4 +102,3 @@ MQTT-C was initially developed as a CMPT 434 (Winter Term, 2018) final project a
 Saskatchewan by:
 - **Liam Bindle**
 - **Demilade Adeoye**
-

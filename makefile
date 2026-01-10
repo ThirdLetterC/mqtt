@@ -36,7 +36,7 @@ $(BINDIR):
 	mkdir -p $(BINDIR)
 
 $(MQTT_C_UNITTESTS): tests.c $(MQTT_C_SOURCES)
-	$(CC) $(CFLAGS) $^ -lcmocka $(MSFLAGS) $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $^ $(MSFLAGS) $(LDFLAGS) -o $@
 
 clean:
 	rm -rf $(BINDIR)

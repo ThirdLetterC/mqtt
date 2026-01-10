@@ -125,15 +125,8 @@ endif()
 
 # Build tests
 if(MQTT_C_TESTS)
-    find_path(CMOCKA_INCLUDE_DIR cmocka.h)
-    find_library(CMOCKA_LIBRARY cmocka)
-    if((NOT CMOCKA_INCLUDE_DIR) OR (NOT CMOCKA_LIBRARY))
-        message(FATAL_ERROR "Failed to find cmocka! Add cmocka's install prefix to CMAKE_PREFIX_PATH to resolve this error.")
-    endif()
-
     add_executable(tests tests.c)
-    target_link_libraries(tests ${CMOCKA_LIBRARY} mqttc)
-    target_include_directories(tests PRIVATE ${CMOCKA_INCLUDE_DIR})
+    target_link_libraries(tests mqttc)
     list(APPEND MQTT_TARGETS tests)
 endif()
 

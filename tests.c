@@ -1,7 +1,5 @@
-#include <stdarg.h>
+#include <stdint.h>
 #include <stddef.h>
-#include <setjmp.h>
-#include <cmocka.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -29,6 +27,47 @@
 
 #include <mqtt.h>
 #include "examples/templates/posix_sockets.h"
+
+#define assert_true(condition) \
+    do { \
+        if (!(condition)) { \
+            fprintf(stderr, "Assertion failed: %s (%s:%d)\n", #condition, __FILE__, __LINE__); \
+            exit(EXIT_FAILURE); \
+        } \
+    } while (0)
+
+#define assert_int_equal(expected, actual) \
+    do { \
+        auto _expected = (expected); \
+        auto _actual = (actual); \
+        if (_expected != _actual) { \
+            fprintf(stderr, "Assertion failed: %s == %s (0x%llx != 0x%llx) (%s:%d)\n", \
+                    #expected, #actual, (unsigned long long)_expected, (unsigned long long)_actual, \
+                    __FILE__, __LINE__); \
+            exit(EXIT_FAILURE); \
+        } \
+    } while (0)
+
+struct test_case {
+    const char *name;
+    void (*fn)(void**);
+};
+
+static void run_test(const struct test_case test) {
+    void *state = nullptr;
+    printf(" - %s... ", test.name);
+    fflush(stdout);
+    test.fn(&state);
+    puts("ok");
+}
+
+static void run_group(const char *heading, const struct test_case *tests, size_t count) {
+    printf("[%s]\n", heading);
+    for (size_t i = 0; i < count; ++i) {
+        run_test(tests[i]);
+    }
+    puts("");
+}
 
 void make_socket_blocking(int socket)
 {
@@ -526,7 +565,7 @@ static void TEST__utility__ping([[maybe_unused]] void** state) {
     close(client.socketfd);
 }
 
-#define QM_SZ (int) sizeof(struct mqtt_queued_message)
+constexpr int QM_SZ = (int) sizeof(struct mqtt_queued_message);
 static void TEST__utility__message_queue([[maybe_unused]] void **unused) {
     uint8_t mem[32 + 4*QM_SZ];
     struct mqtt_message_queue mq;
@@ -739,8 +778,8 @@ static void TEST__api__publish_subscribe__single([[maybe_unused]] void **unused)
 }
 
 
-#define TEST_PACKET_SIZE (149)
-#define TEST_DATA_SIZE (128)
+constexpr size_t TEST_PACKET_SIZE = 149;
+constexpr size_t TEST_DATA_SIZE = 128;
 static void TEST__api__publish_subscribe__multiple([[maybe_unused]] void **unused) {
     uint8_t sendmem1[TEST_PACKET_SIZE*4 + sizeof(struct mqtt_queued_message)*4], 
             sendmem2[TEST_PACKET_SIZE*4 + sizeof(struct mqtt_queued_message)*4];
@@ -977,8 +1016,6 @@ static void TEST__api__publish_subscribe__multiple([[maybe_unused]] void **unuse
 }
 
 int main(int argc, const char *argv[]) {
-    int rv = 0;
-
     /* get address (argv[1] if present) */
     if (argc > 1) {
         addr = argv[1];
@@ -1001,45 +1038,43 @@ int main(int argc, const char *argv[]) {
     }
 #endif
 
-    printf("[MQTT Packet Serialization/Deserialization Tests]\n");
-    const struct CMUnitTest framing_tests[] = {
-        cmocka_unit_test(TEST__framing__fixed_header),
-        cmocka_unit_test(TEST__framing__connect),
-        cmocka_unit_test(TEST__framing__connack),
-        cmocka_unit_test(TEST__framing__publish),
-        cmocka_unit_test(TEST__framing__pubxxx),
-        cmocka_unit_test(TEST__framing__subscribe),
-        cmocka_unit_test(TEST__framing__suback),
-        cmocka_unit_test(TEST__framing__unsubscribe),
-        cmocka_unit_test(TEST__framing__unsuback),
-        cmocka_unit_test(TEST__framing__ping),
-        cmocka_unit_test(TEST__framing__disconnect),
+    static const struct test_case framing_tests[] = {
+        { "framing__fixed_header", TEST__framing__fixed_header },
+        { "framing__connect", TEST__framing__connect },
+        { "framing__connack", TEST__framing__connack },
+        { "framing__publish", TEST__framing__publish },
+        { "framing__pubxxx", TEST__framing__pubxxx },
+        { "framing__subscribe", TEST__framing__subscribe },
+        { "framing__suback", TEST__framing__suback },
+        { "framing__unsubscribe", TEST__framing__unsubscribe },
+        { "framing__unsuback", TEST__framing__unsuback },
+        { "framing__ping", TEST__framing__ping },
+        { "framing__disconnect", TEST__framing__disconnect },
     };
 
-    rv |= cmocka_run_group_tests(framing_tests, nullptr, nullptr);
+    run_group("MQTT Packet Serialization/Deserialization Tests", framing_tests,
+              sizeof(framing_tests) / sizeof(framing_tests[0]));
 
-    printf("\n[MQTT-C Utilities Tests]\n");
-    const struct CMUnitTest util_tests[] = {
-        cmocka_unit_test(TEST__utility__message_queue),
-        cmocka_unit_test(TEST__utility__pid_lfsr),
-        cmocka_unit_test(TEST__utility__connect_disconnect),
-        cmocka_unit_test(TEST__utility__ping),
+    static const struct test_case util_tests[] = {
+        { "utility__message_queue", TEST__utility__message_queue },
+        { "utility__pid_lfsr", TEST__utility__pid_lfsr },
+        { "utility__connect_disconnect", TEST__utility__connect_disconnect },
+        { "utility__ping", TEST__utility__ping },
     };
 
-    rv |= cmocka_run_group_tests(util_tests, nullptr, nullptr);
+    run_group("MQTT-C Utilities Tests", util_tests, sizeof(util_tests) / sizeof(util_tests[0]));
 
-    printf("\n[MQTT-C API Tests]\n");
-    const struct CMUnitTest api_tests[] = {
-        cmocka_unit_test(TEST__api__connect_ping_disconnect),
-        cmocka_unit_test(TEST__api__publish_subscribe__single),
-        cmocka_unit_test(TEST__api__publish_subscribe__multiple),
+    static const struct test_case api_tests[] = {
+        { "api__connect_ping_disconnect", TEST__api__connect_ping_disconnect },
+        { "api__publish_subscribe__single", TEST__api__publish_subscribe__single },
+        { "api__publish_subscribe__multiple", TEST__api__publish_subscribe__multiple },
     };
 
-    rv |= cmocka_run_group_tests(api_tests, nullptr, nullptr);
+    run_group("MQTT-C API Tests", api_tests, sizeof(api_tests) / sizeof(api_tests[0]));
 
 #if defined(WIN32)
     WSACleanup();
 #endif
 
-    return rv;
+    return 0;
 }
