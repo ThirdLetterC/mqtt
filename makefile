@@ -43,3 +43,6 @@ clean:
 
 check: all
 	./$(MQTT_C_UNITTESTS)
+
+format:
+	clang-format -i --style=file src/*.c include/mqtt/*.h examples/*.c tests.c

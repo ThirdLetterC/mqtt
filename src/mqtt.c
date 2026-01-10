@@ -37,13 +37,16 @@ enum MQTTErrors mqtt_sync(struct mqtt_client *client) {
     enum MQTTErrors err;
     int reconnecting = 0;
     MQTT_PAL_MUTEX_LOCK(&client->mutex);
+    int mutex_locked = 1;
     if (client->error != MQTT_ERROR_RECONNECTING && client->error != MQTT_OK && client->reconnect_callback != nullptr) {
         client->reconnect_callback(client, &client->reconnect_state);
         if (client->error != MQTT_OK) {
             client->error = MQTT_ERROR_RECONNECT_FAILED;
-
-            /* normally unlocked during CONNECT */
+        }
+        /* normally unlocked during CONNECT */
+        if (mutex_locked) {
             MQTT_PAL_MUTEX_UNLOCK(&client->mutex);
+            mutex_locked = 0;
         }
         err = client->error;
 
@@ -54,7 +57,10 @@ enum MQTTErrors mqtt_sync(struct mqtt_client *client) {
             reconnecting = 1;
             client->error = MQTT_OK;
         }
-        MQTT_PAL_MUTEX_UNLOCK(&client->mutex);
+        if (mutex_locked) {
+            MQTT_PAL_MUTEX_UNLOCK(&client->mutex);
+            mutex_locked = 0;
+        }
     }
 
     /* Call inspector callback if necessary */
@@ -1287,6 +1293,9 @@ ssize_t mqtt_pack_publish_request(uint8_t *buf, size_t bufsz,
     if(buf == nullptr || topic_name == nullptr) {
         return MQTT_ERROR_nullptrPTR;
     }
+    if (application_message_size > 0u && application_message == nullptr) {
+        return MQTT_ERROR_nullptrPTR;
+    }
 
     /* inspect QoS level */
     inspected_qos = (publish_flags & MQTT_PUBLISH_QOS_MASK) >> 1; /* mask */
@@ -1345,9 +1354,11 @@ ssize_t mqtt_unpack_publish_response(struct mqtt_response *mqtt_response, const 
     const uint8_t *const start = buf;
     struct mqtt_fixed_header *fixed_header;
     struct mqtt_response_publish *response;
+    uint32_t remaining_length;
     
     fixed_header = &(mqtt_response->fixed_header);
     response = &(mqtt_response->decoded.publish);
+    remaining_length = fixed_header->remaining_length;
 
     /* get flags */
     response->dup_flag = (fixed_header->control_flags & MQTT_PUBLISH_DUP) >> 3;
@@ -1355,27 +1366,35 @@ ssize_t mqtt_unpack_publish_response(struct mqtt_response *mqtt_response, const 
     response->retain_flag = fixed_header->control_flags & MQTT_PUBLISH_RETAIN;
 
     /* make sure that remaining length is valid */
-    if (mqtt_response->fixed_header.remaining_length < 4) {
+    if (remaining_length < 4u) {
         return MQTT_ERROR_MALFORMED_RESPONSE;
     }
 
     /* parse variable header */
     response->topic_name_size = __mqtt_unpack_uint16(buf);
     buf += 2;
+    if ((size_t)response->topic_name_size + 2u > remaining_length) {
+        return MQTT_ERROR_MALFORMED_RESPONSE;
+    }
     response->topic_name = buf;
     buf += response->topic_name_size;
 
     if (response->qos_level > 0) {
+        if ((size_t)response->topic_name_size + 4u > remaining_length) {
+            return MQTT_ERROR_MALFORMED_RESPONSE;
+        }
         response->packet_id = __mqtt_unpack_uint16(buf);
         buf += 2;
     }
 
     /* get payload */
     response->application_message = buf;
-    if (response->qos_level == 0) {
-        response->application_message_size = fixed_header->remaining_length - response->topic_name_size - 2;
-    } else {
-        response->application_message_size = fixed_header->remaining_length - response->topic_name_size - 4;
+    {
+        size_t header_bytes = 2u + response->topic_name_size + (response->qos_level == 0 ? 0u : 2u);
+        if (header_bytes > remaining_length) {
+            return MQTT_ERROR_MALFORMED_RESPONSE;
+        }
+        response->application_message_size = remaining_length - header_bytes;
     }
     buf += response->application_message_size;
     
@@ -1616,6 +1635,13 @@ ssize_t mqtt_pack_unsubscribe_request(uint8_t *buf, size_t bufsz, unsigned int p
 void mqtt_mq_init(struct mqtt_message_queue *mq, void *buf, size_t bufsz) 
 {  
     mq->mem_start = buf;
+    if (buf == nullptr) {
+        mq->mem_end = (uint8_t *)buf;
+        mq->curr = (uint8_t *)buf;
+        mq->queue_tail = (struct mqtt_queued_message *)mq->mem_end;
+        mq->curr_sz = 0;
+        return;
+    }
     mq->mem_end = (uint8_t *)buf + bufsz;
     mq->curr = (uint8_t *)buf;
     mq->queue_tail = (struct mqtt_queued_message *)mq->mem_end;
