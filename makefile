@@ -39,10 +39,10 @@ $(MQTT_C_UNITTESTS): tests.c $(MQTT_C_SOURCES)
 	$(CC) $(CFLAGS) $^ $(MSFLAGS) $(LDFLAGS) -o $@
 
 clean:
-	rm -rf $(BINDIR)
+	rm -rf $(BINDIR) zig-out .zig-cache
 
 check: all
 	./$(MQTT_C_UNITTESTS)
 
 format:
-	clang-format -i --style=file src/*.c include/mqtt/*.h examples/*.c tests.c
+	clang-format -i --style=file src/*.c include/*.h examples/*.c examples/templates/*.h tests.c
