@@ -686,7 +686,7 @@ static void TEST__utility__ping([[maybe_unused]] void **state) {
 
 constexpr int QM_SZ = (int)sizeof(struct mqtt_queued_message);
 static void TEST__utility__message_queue([[maybe_unused]] void **unused) {
-  uint8_t mem[32 + 4 * QM_SZ];
+  alignas(struct mqtt_queued_message) uint8_t mem[32 + 4 * QM_SZ];
   struct mqtt_message_queue mq;
   struct mqtt_queued_message *tail;
   mqtt_mq_init(&mq, mem, sizeof(mem));
@@ -799,7 +799,7 @@ void publish_callback([[maybe_unused]] void **state,
 }
 
 static void TEST__api__connect_ping_disconnect([[maybe_unused]] void **unused) {
-  uint8_t sendmem[2048];
+  alignas(struct mqtt_queued_message) uint8_t sendmem[2048];
   uint8_t recvmem[1024];
   ssize_t rv;
   struct mqtt_client client;
@@ -845,7 +845,8 @@ static void TEST__api__connect_ping_disconnect([[maybe_unused]] void **unused) {
 
 static void
 TEST__api__publish_subscribe__single([[maybe_unused]] void **unused) {
-  uint8_t sendmem1[2048], sendmem2[2048];
+  alignas(struct mqtt_queued_message) uint8_t sendmem1[2048],
+      sendmem2[2048];
   uint8_t recvmem1[1024], recvmem2[1024];
   struct mqtt_client sender, receiver;
 
@@ -908,11 +909,17 @@ TEST__api__publish_subscribe__single([[maybe_unused]] void **unused) {
 
 constexpr size_t TEST_PACKET_SIZE = 149;
 constexpr size_t TEST_DATA_SIZE = 128;
+constexpr size_t TEST_SEND_ALIGNMENT = alignof(struct mqtt_queued_message);
+constexpr size_t TEST_SENDMEM_SIZE =
+    TEST_PACKET_SIZE * 4 + sizeof(struct mqtt_queued_message) * 4;
+constexpr size_t TEST_SENDMEM_ALIGNED =
+    TEST_SENDMEM_SIZE +
+    (TEST_SEND_ALIGNMENT - (TEST_SENDMEM_SIZE % TEST_SEND_ALIGNMENT)) %
+        TEST_SEND_ALIGNMENT;
 static void
 TEST__api__publish_subscribe__multiple([[maybe_unused]] void **unused) {
-  uint8_t
-      sendmem1[TEST_PACKET_SIZE * 4 + sizeof(struct mqtt_queued_message) * 4],
-      sendmem2[TEST_PACKET_SIZE * 4 + sizeof(struct mqtt_queued_message) * 4];
+  alignas(struct mqtt_queued_message)
+  uint8_t sendmem1[TEST_SENDMEM_ALIGNED], sendmem2[TEST_SENDMEM_ALIGNED];
   uint8_t recvmem1[TEST_PACKET_SIZE], recvmem2[TEST_PACKET_SIZE];
   struct mqtt_client sender, receiver;
   ssize_t rv;

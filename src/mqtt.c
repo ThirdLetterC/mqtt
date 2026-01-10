@@ -1626,7 +1626,11 @@ void mqtt_mq_init(struct mqtt_message_queue *mq, void *buf, size_t bufsz) {
     mq->curr_sz = 0;
     return;
   }
-  mq->mem_end = (uint8_t *)buf + bufsz;
+  constexpr size_t queue_align = alignof(struct mqtt_queued_message);
+  const uintptr_t mem_end_addr =
+      (uintptr_t)buf + bufsz - ((uintptr_t)buf + bufsz) % queue_align;
+  mq->mem_end = (uint8_t *)(mem_end_addr < (uintptr_t)buf ? (uintptr_t)buf
+                                                          : mem_end_addr);
   mq->curr = (uint8_t *)buf;
   mq->queue_tail = (struct mqtt_queued_message *)mq->mem_end;
   mq->curr_sz = mqtt_mq_currsz(mq);
