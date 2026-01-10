@@ -1,6 +1,10 @@
 #if !defined(__MQTT_H__)
 #define __MQTT_H__
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
 /*
 MIT License
 
@@ -128,7 +132,7 @@ extern "C" {
   * MQTT v3.1.1: MQTT Control Packet Types
   * </a>
   */
-  enum MQTTControlPacketType {
+enum MQTTControlPacketType {
     MQTT_CONTROL_CONNECT=1u,
     MQTT_CONTROL_CONNACK=2u,
     MQTT_CONTROL_PUBLISH=3u,
@@ -172,19 +176,19 @@ struct mqtt_fixed_header {
  * MQTT v3.1.1: CONNECT Variable Header.
  * </a>  
  */
-#define MQTT_PROTOCOL_LEVEL 0x04
+static constexpr uint8_t MQTT_PROTOCOL_LEVEL = 0x04;
 
 /** 
  * @brief A macro used to declare the enum MQTTErrors and associated 
  *        error messages (the members of the num) at the same time.
  */
 #define __ALL_MQTT_ERRORS(MQTT_ERROR)                    \
-    MQTT_ERROR(MQTT_ERROR_NULLPTR)                       \
+    MQTT_ERROR(MQTT_ERROR_nullptrPTR)                       \
     MQTT_ERROR(MQTT_ERROR_CONTROL_FORBIDDEN_TYPE)        \
     MQTT_ERROR(MQTT_ERROR_CONTROL_INVALID_FLAGS)         \
     MQTT_ERROR(MQTT_ERROR_CONTROL_WRONG_TYPE)            \
     MQTT_ERROR(MQTT_ERROR_CONNECT_CLIENT_ID_REFUSED)     \
-    MQTT_ERROR(MQTT_ERROR_CONNECT_NULL_WILL_MESSAGE)     \
+    MQTT_ERROR(MQTT_ERROR_CONNECT_nullptr_WILL_MESSAGE)     \
     MQTT_ERROR(MQTT_ERROR_CONNECT_FORBIDDEN_WILL_QOS)    \
     MQTT_ERROR(MQTT_ERROR_CONNACK_FORBIDDEN_FLAGS)       \
     MQTT_ERROR(MQTT_ERROR_CONNACK_FORBIDDEN_CODE)        \
@@ -284,7 +288,13 @@ uint16_t __mqtt_unpack_uint16(const uint8_t *buf);
 ssize_t __mqtt_pack_str(uint8_t *buf, const char* str);
 
 /** @brief A macro to get the MQTT string length from a c-string. */
-#define __mqtt_packed_cstrlen(x) (2 + (unsigned int)strlen(x))
+[[nodiscard]]
+static inline size_t __mqtt_packed_cstrlen(const char *str) {
+    if (str == nullptr) {
+        return 2u;
+    }
+    return 2u + strlen(str);
+}
 
 /* RESPONSES */
 
@@ -690,19 +700,19 @@ enum MQTTConnectFlags {
  * 
  * @param[out] buf the buffer to pack the connection request packet into.
  * @param[in] bufsz the number of bytes left in \p buf.
- * @param[in] client_id the ID that identifies the local client. \p client_id can be NULL or an empty
+ * @param[in] client_id the ID that identifies the local client. \p client_id can be nullptr or an empty
  *                      string for Anonymous clients.
  * @param[in] will_topic the topic under which the local client's will message will be published.
- *                       Set to \c NULL for no will message. If \p will_topic is not \c NULL a
+ *                       Set to \c nullptr for no will message. If \p will_topic is not \c nullptr a
  *                       \p will_message must also be provided.
  * @param[in] will_message the will message to be published upon a unsuccessful disconnection of
- *                         the local client. Set to \c NULL if \p will_topic is \c NULL. 
- *                         \p will_message must \em not be \c NULL if \p will_topic is not 
- *                         \c NULL.
+ *                         the local client. Set to \c nullptr if \p will_topic is \c nullptr. 
+ *                         \p will_message must \em not be \c nullptr if \p will_topic is not 
+ *                         \c nullptr.
  * @param[in] will_message_size The size of \p will_message in bytes.
- * @param[in] user_name the username to be used to connect to the broker with. Set to \c NULL if 
+ * @param[in] user_name the username to be used to connect to the broker with. Set to \c nullptr if 
  *                      no username is required.
- * @param[in] password the password to be used to connect to the broker with. Set to \c NULL if
+ * @param[in] password the password to be used to connect to the broker with. Set to \c nullptr if
  *                     no password is required.
  * @param[in] connect_flags additional MQTTConnectFlags to be set. The only flags that need to be
  *                          set manually are \c MQTT_CONNECT_CLEAN_SESSION,
@@ -827,12 +837,12 @@ ssize_t mqtt_pack_pubxxx_request(uint8_t *buf, size_t bufsz,
  * @param[out] buf the buffer to put the SUBSCRIBE packet in.
  * @param[in] bufsz the maximum number of bytes that can be put into \p buf.
  * @param[in] packet_id the packet ID to be used.
- * @param[in] ... \c NULL terminated list of (\c {const char *topic_name}, \c {int max_qos_level})
+ * @param[in] ... \c nullptr terminated list of (\c {const char *topic_name}, \c {int max_qos_level})
  *                pairs.
  * 
- * @note The variadic arguments, \p ..., \em must be followed by a \c NULL. For example:
+ * @note The variadic arguments, \p ..., \em must be followed by a \c nullptr. For example:
  * @code
- * ssize_t n = mqtt_pack_subscribe_request(buf, bufsz, 1234, "topic_1", 0, "topic_2", 2, NULL);
+ * ssize_t n = mqtt_pack_subscribe_request(buf, bufsz, 1234, "topic_1", 0, "topic_2", 2, nullptr);
  * @endcode
  * 
  * @see <a href="http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718063">
@@ -862,11 +872,11 @@ ssize_t mqtt_pack_subscribe_request(uint8_t *buf, size_t bufsz,
  * @param[out] buf the buffer to put the UNSUBSCRIBE packet in.
  * @param[in] bufsz the maximum number of bytes that can be put into \p buf.
  * @param[in] packet_id the packet ID to be used.
- * @param[in] ... \c NULL terminated list of \c {const char *topic_name}'s to unsubscribe from.
+ * @param[in] ... \c nullptr terminated list of \c {const char *topic_name}'s to unsubscribe from.
  * 
- * @note The variadic arguments, \p ..., \em must be followed by a \c NULL. For example:
+ * @note The variadic arguments, \p ..., \em must be followed by a \c nullptr. For example:
  * @code
- * ssize_t n = mqtt_pack_unsubscribe_request(buf, bufsz, 4321, "topic_1", "topic_2", NULL);
+ * ssize_t n = mqtt_pack_unsubscribe_request(buf, bufsz, 4321, "topic_1", "topic_2", nullptr);
  * @endcode
  * 
  * @see <a href="http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718072">
@@ -1052,11 +1062,11 @@ struct mqtt_queued_message* mqtt_mq_register(struct mqtt_message_queue *mq, size
  * 
  * @param mq The message queue.
  * @param[in] control_type The control type of the message you want to find.
- * @param[in] packet_id The packet ID of the message you want to find. Set to \c NULL if you 
+ * @param[in] packet_id The packet ID of the message you want to find. Set to \c nullptr if you 
  *            don't want to specify a packet ID.
  * 
  * @relates mqtt_message_queue
- * @returns The found message. \c NULL if the message was not found.
+ * @returns The found message. \c nullptr if the message was not found.
  */
 struct mqtt_queued_message* mqtt_mq_find(const struct mqtt_message_queue *mq, enum MQTTControlPacketType control_type, const uint16_t *packet_id);
 
@@ -1187,7 +1197,7 @@ struct mqtt_client {
      * This callback can be used to perform custom error detection, namely platform
      * specific socket error detection, and force the client into an error state.
      * 
-     * This member is always initialized to NULL but it can be manually set at any 
+     * This member is always initialized to nullptr but it can be manually set at any 
      * time.
      */
     enum MQTTErrors (*inspector_callback)(struct mqtt_client*);
@@ -1383,7 +1393,7 @@ enum MQTTErrors mqtt_init(struct mqtt_client *client,
  *            client to the broker and perform application level error handling. 
  * @param[in] reconnect_state A pointer to some state data for your \p reconnect_callback.
  *            If your \p reconnect_callback does not require any state information set this
- *            to NULL. A pointer to the memory address where the client stores a copy of this
+ *            to nullptr. A pointer to the memory address where the client stores a copy of this
  *            pointer is passed as the second argumnet to \p reconnect_callback. 
  * @param[in] publish_response_callback The callback to call whenever application messages
  *            are received from the broker. 
@@ -1434,20 +1444,20 @@ void mqtt_reinit(struct mqtt_client* client,
  * @pre mqtt_init must have been called.
  * 
  * @param[in,out] client The MQTT client.
- * @param[in] client_id The unique name identifying the client. (or NULL)
+ * @param[in] client_id The unique name identifying the client. (or nullptr)
  * @param[in] will_topic The topic name of client's \p will_message. If no will message is 
- *            desired set to \c NULL.
+ *            desired set to \c nullptr.
  * @param[in] will_message The application message (data) to be published in the event the 
- *            client ungracefully disconnects. Set to \c NULL if \p will_topic is \c NULL.
+ *            client ungracefully disconnects. Set to \c nullptr if \p will_topic is \c nullptr.
  * @param[in] will_message_size The size of \p will_message in bytes.
  * @param[in] user_name The username to use when establishing the session with the MQTT broker.
- *            Set to \c NULL if a username is not required.
+ *            Set to \c nullptr if a username is not required.
  * @param[in] password The password to use when establishing the session with the MQTT broker.
- *            Set to \c NULL if a password is not required.
+ *            Set to \c nullptr if a password is not required.
  * @param[in] connect_flags Additional \ref MQTTConnectFlags to use when establishing the connection. 
  *            These flags are for forcing the session to start clean, 
  *            \c MQTT_CONNECT_CLEAN_SESSION, the QOS level to publish the \p will_message with 
- *            (provided \c will_message != \c NULL), MQTT_CONNECT_WILL_QOS_[0,1,2], and whether 
+ *            (provided \c will_message != \c nullptr), MQTT_CONNECT_WILL_QOS_[0,1,2], and whether 
  *            or not the broker should retain the \c will_message, MQTT_CONNECT_WILL_RETAIN.
  * @param[in] keep_alive The keep-alive time in seconds. A reasonable value for this is 400 [seconds]. 
  * 

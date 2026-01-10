@@ -63,8 +63,26 @@ pub fn build(b: *std.build.Builder) !void {
 fn includeCommon(lib: *std.build.LibExeObjStep) !void {
     lib.addIncludeDir("include");
 
-    lib.addCSourceFile("src/mqtt.c", &[_][]const u8 {});
-    lib.addCSourceFile("src/mqtt_pal.c", &[_][]const u8 {});
+    var flags = std.ArrayList([]const u8).init(std.heap.page_allocator);
+    try flags.appendSlice(&.{
+        "-std=c23",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Werror",
+        "-D_POSIX_C_SOURCE=200809L",
+    });
+    if (lib.root_module.optimize == .Debug) {
+        try flags.appendSlice(&.{
+            "-fsanitize=address",
+            "-fsanitize=undefined",
+            "-fsanitize=leak",
+        });
+    }
+    const cflags = try flags.toOwnedSlice();
+
+    lib.addCSourceFile("src/mqtt.c", cflags);
+    lib.addCSourceFile("src/mqtt_pal.c", cflags);
 
     lib.setBuildMode(.Debug); // Can be .Debug, .ReleaseSafe, .ReleaseFast, and .ReleaseSmall
     lib.linkLibC();

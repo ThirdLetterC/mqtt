@@ -49,6 +49,7 @@ int _mqtt_pal_dummy;
 
 ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len, int flags) {
     enum MQTTErrors error = 0;
+    (void)flags;
     size_t sent = 0;
     while(sent < len) {
         int rv = mbedtls_ssl_write(fd, (const unsigned char*)buf + sent, len - sent);
@@ -85,6 +86,7 @@ ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len,
 ssize_t mqtt_pal_recvall(mqtt_pal_socket_handle fd, void* buf, size_t bufsz, int flags) {
     const void *const start = buf;
     enum MQTTErrors error = 0;
+    (void)flags;
     int rv;
     do {
         rv = mbedtls_ssl_read(fd, (unsigned char*)buf, bufsz);
@@ -128,6 +130,7 @@ ssize_t mqtt_pal_recvall(mqtt_pal_socket_handle fd, void* buf, size_t bufsz, int
 #include <wolfssl/ssl.h>
 
 ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len, int flags) {
+    (void)flags;
     size_t sent = 0;
     while (sent < len) {
         int tmp = wolfSSL_write(fd, buf + sent, (int)(len - sent));
@@ -145,6 +148,7 @@ ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len,
 
 ssize_t mqtt_pal_recvall(mqtt_pal_socket_handle fd, void* buf, size_t bufsz, int flags) {
     const void* const start = buf;
+    (void)flags;
     int tmp;
     do {
         tmp = wolfSSL_read(fd, buf, (int)bufsz);
@@ -297,6 +301,7 @@ ssize_t mqtt_pal_recvall(mqtt_pal_socket_handle fd, void* buf, size_t bufsz, int
 #include <openssl/err.h>
 
 ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len, int flags) {
+    (void)flags;
     size_t sent = 0;
     while(sent < len) {
         int tmp = BIO_write(fd, (const char*)buf + sent, (int)(len - sent));
@@ -311,6 +316,7 @@ ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len,
 }
 
 ssize_t mqtt_pal_recvall(mqtt_pal_socket_handle fd, void* buf, size_t bufsz, int flags) {
+    (void)flags;
     const char* const start = (const char*)buf;
     char* bufptr = (char*)buf;
     int rv;

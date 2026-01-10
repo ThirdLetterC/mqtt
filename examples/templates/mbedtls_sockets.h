@@ -1,10 +1,12 @@
 #if !defined(__MBEDTLS_SOCKET_TEMPLATE_H__)
 #define __MBEDTLS_SOCKET_TEMPLATE_H__
 
+#include <stddef.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <mbedtls/error.h>
 #include <mbedtls/entropy.h>
@@ -21,7 +23,8 @@ int
 mbedtls_net_poll(mbedtls_net_context * ctx, uint32_t rw, uint32_t timeout)
 {
 	/* XXX this is not ideal but good enough for an example */
-	usleep(300);
+    const struct timespec pause_interval = { .tv_sec = 0, .tv_nsec = 300'000L };
+	nanosleep(&pause_interval, nullptr);
 	return 1;
 }
 #endif
@@ -96,7 +99,7 @@ void open_nb_socket(struct mbedtls_context *ctx,
     if (rv != 0) {
         failed("mbedtls_ssl_config_defaults", rv);
     }
-    mbedtls_ssl_conf_ca_chain(ssl_conf, ca_crt, NULL);
+    mbedtls_ssl_conf_ca_chain(ssl_conf, ca_crt, nullptr);
     mbedtls_ssl_conf_authmode(ssl_conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
     mbedtls_ssl_conf_rng(ssl_conf, mbedtls_ctr_drbg_random, ctr_drbg);
 
@@ -120,7 +123,7 @@ void open_nb_socket(struct mbedtls_context *ctx,
         failed("mbedtls_ssl_set_hostname", rv);
     }
     mbedtls_ssl_set_bio(ssl_ctx, net_ctx,
-                        mbedtls_net_send, mbedtls_net_recv, NULL);
+                        mbedtls_net_send, mbedtls_net_recv, nullptr);
 
     for (;;) {
         rv = mbedtls_ssl_handshake(ssl_ctx);

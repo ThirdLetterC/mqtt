@@ -1,11 +1,15 @@
 #if !defined(__OPENSSL_SOCKET_TEMPLATE_H__)
 #define __OPENSSL_SOCKET_TEMPLATE_H__
 
+#include <stddef.h>
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <time.h>
 
 /*
     A template for opening a non-blocking OpenSSL connection.
@@ -69,17 +73,17 @@ void open_nb_socket(BIO**       bio,
     free(port_copy);
 
     /* wait for connect with 10 second timeout */
-    int start_time = (int)time(NULL);
+    int start_time = (int)time(nullptr);
     int do_connect_rv = (int)BIO_do_connect(*bio);
-    while(do_connect_rv <= 0 && BIO_should_retry(*bio) && (int)time(NULL) - start_time < 10) {
+    while(do_connect_rv <= 0 && BIO_should_retry(*bio) && (int)time(nullptr) - start_time < 10) {
         do_connect_rv = (int)BIO_do_connect(*bio);
     }
     if (do_connect_rv <= 0) {
         printf("error: %s\n", ERR_reason_error_string(ERR_get_error()));
         BIO_free_all(*bio);
         SSL_CTX_free(*ssl_ctx);
-        *bio = NULL;
-        *ssl_ctx=NULL;
+        *bio = nullptr;
+        *ssl_ctx = nullptr;
         return;
     }
 

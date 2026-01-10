@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
-#include <stdbool.h>
+#include <time.h>
 
 #include <mqtt.h>
 
@@ -20,6 +20,8 @@ typedef struct {
     bool error;
 } buffer_head;
 
+static const struct timespec refresh_delay = { .tv_sec = 0, .tv_nsec = 100'000'000L };
+
 int testCerts(br_x509_trust_anchor *anch);
 
 /**
@@ -27,7 +29,7 @@ int testCerts(br_x509_trust_anchor *anch);
  * 
  * @note This function is not used in this example. 
  */
-static void publish_callback(void** unused, struct mqtt_response_publish *published);
+static void publish_callback([[maybe_unused]] void** unused, struct mqtt_response_publish *published);
 
 /**
  * @brief Safely closes the socket in \p ctx before \c exit. 
@@ -164,7 +166,7 @@ int main(int argc, const char *argv[])
     uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
     uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
     mqtt_init(&client, &ctx, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
-    mqtt_connect(&client, "publishing_client", NULL, NULL, 0, NULL, NULL, 0, 400);
+    mqtt_connect(&client, "publishing_client", nullptr, nullptr, 0, nullptr, nullptr, 0, 400);
     mqtt_subscribe(&client, subscribe, 0);
 
     /* check that we don't have any errors */
@@ -203,7 +205,7 @@ int main(int argc, const char *argv[])
                 exit_example(EXIT_FAILURE, &ctx);
             }
 
-            if (MQTT_OK != mqtt_connect(&client, "publishing_client", NULL, NULL, 0, NULL, NULL, 0, 400)) {
+            if (MQTT_OK != mqtt_connect(&client, "publishing_client", nullptr, nullptr, 0, nullptr, nullptr, 0, 400)) {
                 fprintf(stderr, "mqtt_connect failed: %s\n", mqtt_error_str(client.error));
                 exit_example(EXIT_FAILURE, &ctx);
             }
@@ -248,7 +250,7 @@ int main(int argc, const char *argv[])
             printf("Communication failure: %d\n", rc);
             return 4;
         }
-        usleep(100000U);
+        nanosleep(&refresh_delay, nullptr);
     }   
 
     /* disconnect */
@@ -276,7 +278,7 @@ static void exit_example(int status, bearssl_context *ctx)
     exit(status);
 }
 
-static void publish_callback(void** unused, struct mqtt_response_publish *published) 
+static void publish_callback([[maybe_unused]] void** unused, struct mqtt_response_publish *published) 
 {
     static const char *prelim = "Received publish('";
     /* note that published->topic_name is NOT null-terminated (here we'll change it to a c-string) */
@@ -324,7 +326,7 @@ static int certificate_to_trust_anchor(br_x509_certificate *xc, br_x509_trust_an
     buffer_head vdn;
     int result = 0;
 
-    vdn.buffer = NULL;
+    vdn.buffer = nullptr;
     vdn.buffer_length = 0;
     vdn.data_length = 0;
     vdn.error = false;
@@ -334,7 +336,7 @@ static int certificate_to_trust_anchor(br_x509_certificate *xc, br_x509_trust_an
     br_x509_decoder_push(&dc, xc->data, xc->data_len);
     pk = br_x509_decoder_get_pkey(&dc);
 
-    if (pk == NULL) {
+    if (pk == nullptr) {
         return 0;
     }
 
@@ -354,8 +356,8 @@ static int certificate_to_trust_anchor(br_x509_certificate *xc, br_x509_trust_an
         ta->pkey.key.rsa.nlen = pk->key.rsa.nlen;
         ta->pkey.key.rsa.elen = pk->key.rsa.elen;
 
-        if (NULL == (ta->pkey.key.rsa.n = (unsigned char *)malloc(ta->pkey.key.rsa.nlen)) ||
-            NULL == ( ta->pkey.key.rsa.e = (unsigned char *)malloc(ta->pkey.key.rsa.elen))) {
+        if (nullptr == (ta->pkey.key.rsa.n = (unsigned char *)malloc(ta->pkey.key.rsa.nlen)) ||
+            nullptr == ( ta->pkey.key.rsa.e = (unsigned char *)malloc(ta->pkey.key.rsa.elen))) {
             free_ta_contents(ta);
             return 0;
         }
@@ -370,7 +372,7 @@ static int certificate_to_trust_anchor(br_x509_certificate *xc, br_x509_trust_an
         ta->pkey.key.ec.curve = pk->key.ec.curve;
         ta->pkey.key.ec.qlen = pk->key.ec.qlen;
 
-        if (NULL == (ta->pkey.key.ec.q = (unsigned char *)malloc(ta->pkey.key.ec.qlen))) {
+        if (nullptr == (ta->pkey.key.ec.q = (unsigned char *)malloc(ta->pkey.key.ec.qlen))) {
             free_ta_contents(ta);
             return 0;
         }
@@ -390,18 +392,18 @@ static size_t get_trusted_anchors_from_file(const char *ca_file, br_x509_trust_a
 {
     // Read the certificates from the file
     FILE *f = fopen(ca_file, "rb");
-    char *certs = NULL;
+    char *certs = nullptr;
     size_t rc = 0;
 
-    if (ca_file != NULL) {
-        if (f != NULL) {
+    if (ca_file != nullptr) {
+        if (f != nullptr) {
             fseek(f, 0, SEEK_END);
             long fsize = ftell(f);
             fseek(f, 0, SEEK_SET);
 
             certs = malloc(fsize);
 
-            if (certs != NULL) {
+            if (certs != nullptr) {
                 size_t read = fread(certs, 1, fsize, f);
                 
                 fclose(f);
@@ -435,7 +437,7 @@ static size_t get_trusted_anchors(const unsigned char *ca, size_t ca_len, br_x50
 	int inobj;
 	int extra_nl;
     bool error;
-    br_x509_trust_anchor *tas = NULL;
+    br_x509_trust_anchor *tas = nullptr;
 
     br_pem_decoder_init(&pc);
     buf = ca;
@@ -455,12 +457,12 @@ static size_t get_trusted_anchors(const unsigned char *ca, size_t ca_len, br_x50
 
 		case BR_PEM_BEGIN_OBJ:
             po_name = strdup(br_pem_decoder_name(&pc));
-            if (po_name == NULL) {
+            if (po_name == nullptr) {
                 fprintf(stderr, "ERROR: out of memeory\n");
                 error = true;
                 continue;
             }
-            bv.buffer = NULL;
+            bv.buffer = nullptr;
             bv.buffer_length = 0;
             bv.data_length = 0;
             bv.error = false;
@@ -478,11 +480,11 @@ static size_t get_trusted_anchors(const unsigned char *ca, size_t ca_len, br_x50
                 || (0 == memcmp(po_name, X509_CERTIFICATE, X509_CERTIFICATE_LEN))) {
 
                     xc.data = bv.buffer;
-                    bv.buffer = NULL;
+                    bv.buffer = nullptr;
                     xc.data_len = bv.data_length;
                     free(po_name);
-                    po_name = NULL;
-                    if (NULL == (tas = (br_x509_trust_anchor *)realloc(tas, (cert_count + 1) * sizeof(br_x509_trust_anchor)))) {
+                    po_name = nullptr;
+                    if (nullptr == (tas = (br_x509_trust_anchor *)realloc(tas, (cert_count + 1) * sizeof(br_x509_trust_anchor)))) {
                 		fprintf(stderr, "ERROR: out of memory\n");
                         error = true;
                         continue;
@@ -491,7 +493,7 @@ static size_t get_trusted_anchors(const unsigned char *ca, size_t ca_len, br_x50
                         error = true;
                         continue;
                     }
-                    xc.data = NULL;
+                    xc.data = nullptr;
                     inobj = 0;
                     cert_count++;
                 }

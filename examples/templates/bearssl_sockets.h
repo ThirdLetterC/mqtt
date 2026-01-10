@@ -1,10 +1,14 @@
 #if !defined(__BEARSSL_SOCKET_TEMPLATE_H__)
 #define __BEARSSL_SOCKET_TEMPLATE_H__
 
-#include <sys/socket.h>
-#include <netdb.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <bearssl.h>
 
@@ -59,7 +63,7 @@ static int host_connect(const char *host, const char *port) {
     struct hostent *he;
     struct in_addr **addr_list;
 
-    if (NULL == (he = gethostbyname(host)))
+    if (nullptr == (he = gethostbyname(host)))
     {
         fprintf(stderr, "Failed to resolve host name\n");
         return -1;
@@ -80,7 +84,7 @@ static int host_connect(const char *host, const char *port) {
     server.sin_port = htons(atoi(port));
 
     /* open the first possible socket */
-    for (i = 0; addr_list[i] != NULL; i++)
+    for (i = 0; addr_list[i] != nullptr; i++)
     {
         memcpy(&server.sin_addr.s_addr, he->h_addr_list[0], he->h_length);
 
@@ -95,7 +99,7 @@ static int host_connect(const char *host, const char *port) {
         }
     }
 
-    if (addr_list[i] == NULL)
+    if (addr_list[i] == nullptr)
         sockfd = -1;
 
     /* return the new socket fd */

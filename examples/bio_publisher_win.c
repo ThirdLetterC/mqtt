@@ -6,6 +6,9 @@
 #include <process.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <windows.h>
 
 #include <mqtt.h>
 #include "templates/bio_sockets.h"
@@ -16,7 +19,7 @@
  * 
  * @note This function is not used in this example. 
  */
-void publish_callback(void** unused, struct mqtt_response_publish *published);
+static void publish_callback([[maybe_unused]] void** unused, [[maybe_unused]] struct mqtt_response_publish *published);
 
 /**
  * @brief The client's refresher. This function triggers back-end routines to 
@@ -26,12 +29,12 @@ void publish_callback(void** unused, struct mqtt_response_publish *published);
  *       \ref __mqtt_send every so often. I've picked 100 ms meaning that 
  *       client ingress/egress traffic will be handled every 100 ms.
  */
-void client_refresher(void* client);
+static void client_refresher(void* client);
 
 /**
  * @brief Safelty closes the \p sockfd and cancels the \p client_daemon before \c exit. 
  */
-void exit_example(int status, BIO* sockfd);
+static void exit_example(int status, BIO* sockfd);
 
 /**
  * A simple program to that publishes the current time whenever ENTER is pressed. 
@@ -71,7 +74,7 @@ int main(int argc, const char *argv[])
     /* open the non-blocking TCP socket (connecting to the broker) */
     BIO* sockfd = open_nb_socket(addr, port);
 
-    if (sockfd == NULL) {
+    if (sockfd == nullptr) {
         exit_example(EXIT_FAILURE, sockfd);
     }
 
@@ -80,7 +83,7 @@ int main(int argc, const char *argv[])
     uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
     uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
     mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
-    mqtt_connect(&client, "publishing_client", NULL, NULL, 0, NULL, NULL, 0, 400);
+    mqtt_connect(&client, "publishing_client", nullptr, nullptr, 0, nullptr, nullptr, 0, 400);
 
     /* check that we don't have any errors */
     if (client.error != MQTT_OK) {
@@ -130,22 +133,21 @@ int main(int argc, const char *argv[])
     exit_example(EXIT_SUCCESS, sockfd);
 }
 
-void exit_example(int status, BIO* sockfd)
+static void exit_example(int status, BIO* sockfd)
 {
-    if (sockfd != NULL) BIO_free_all(sockfd);
+    if (sockfd != nullptr) BIO_free_all(sockfd);
     exit(status);
 }
 
 
 
-void publish_callback(void** unused, struct mqtt_response_publish *published) 
+static void publish_callback([[maybe_unused]] void** unused, [[maybe_unused]] struct mqtt_response_publish *published)
 {
-    /* not used in this example */
 }
 
-void client_refresher(void* client)
+static void client_refresher(void* client)
 {
-    while(1)
+    while(true)
     {
         mqtt_sync((struct mqtt_client*) client);
         Sleep(100);

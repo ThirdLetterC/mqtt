@@ -1,11 +1,13 @@
 #if !defined(__POSIX_SOCKET_TEMPLATE_H__)
 #define __POSIX_SOCKET_TEMPLATE_H__
 
+#include <stddef.h>
 #include <stdio.h>
 #include <sys/types.h>
 #if !defined(WIN32)
 #include <sys/socket.h>
 #include <netdb.h>
+#include <unistd.h>
 #else
 #include <ws2tcpip.h>
 #endif
@@ -36,7 +38,7 @@ int open_nb_socket(const char* addr, const char* port) {
     }
 
     /* open the first possible socket */
-    for(p = servinfo; p != NULL; p = p->ai_next) {
+    for(p = servinfo; p != nullptr; p = p->ai_next) {
         sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (sockfd == -1) continue;
 
