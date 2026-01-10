@@ -131,8 +131,8 @@ typedef int mqtt_pal_socket_handle;
 #include <limits.h>
 #include <stdint.h>
 #include <time.h>
-#include <windows.h>
 #include <winsock2.h>
+#include <windows.h>
 
 typedef SSIZE_T ssize_t;
 #define MQTT_PAL_HTONS(s) htons(s)
