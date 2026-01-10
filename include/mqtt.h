@@ -885,7 +885,7 @@ ssize_t mqtt_pack_pubxxx_request(uint8_t *buf, size_t bufsz,
  *
  * @see mqtt_pack_subscribe_request
  */
-#define MQTT_SUBSCRIBE_REQUEST_MAX_NUM_TOPICS 8
+static constexpr size_t MQTT_SUBSCRIBE_REQUEST_MAX_NUM_TOPICS = 8u;
 
 /**
  * @brief Serialize a SUBSCRIBE packet and put it in \p buf.
@@ -923,7 +923,7 @@ ssize_t mqtt_pack_subscribe_request(uint8_t *buf, size_t bufsz,
  *
  * @see mqtt_pack_unsubscribe_request
  */
-#define MQTT_UNSUBSCRIBE_REQUEST_MAX_NUM_TOPICS 8
+static constexpr size_t MQTT_UNSUBSCRIBE_REQUEST_MAX_NUM_TOPICS = 8u;
 
 /**
  * @brief Serialize a UNSUBSCRIBE packet and put it in \p buf.
@@ -1149,24 +1149,33 @@ mqtt_mq_find(const struct mqtt_message_queue *mq,
  *
  * @returns The mqtt_queued_message at \p index.
  */
-#define mqtt_mq_get(mq_ptr, index)                                             \
-  (((struct mqtt_queued_message *)((mq_ptr)->mem_end)) - 1 - index)
+[[nodiscard]] static inline struct mqtt_queued_message *
+mqtt_mq_get(const struct mqtt_message_queue *mq_ptr, ptrdiff_t index) {
+  return ((struct mqtt_queued_message *)((mq_ptr)->mem_end)) - 1 - index;
+}
 
 /**
  * @brief Returns the number of messages in the message queue, \p mq_ptr.
  * @ingroup details
  */
-#define mqtt_mq_length(mq_ptr)                                                 \
-  (((struct mqtt_queued_message *)((mq_ptr)->mem_end)) - (mq_ptr)->queue_tail)
+[[nodiscard]] static inline ptrdiff_t
+mqtt_mq_length(const struct mqtt_message_queue *mq_ptr) {
+  return ((struct mqtt_queued_message *)(mq_ptr->mem_end)) -
+         mq_ptr->queue_tail;
+}
 
 /**
  * @brief Used internally to recalculate the \c curr_sz.
  * @ingroup details
  */
-#define mqtt_mq_currsz(mq_ptr)                                                 \
-  (((mq_ptr)->curr >= (uint8_t *)((mq_ptr)->queue_tail - 1))                   \
-       ? 0                                                                     \
-       : ((uint8_t *)((mq_ptr)->queue_tail - 1)) - (mq_ptr)->curr)
+[[nodiscard]] static inline size_t
+mqtt_mq_currsz(const struct mqtt_message_queue *mq_ptr) {
+  auto const limit = (uint8_t *)((mq_ptr)->queue_tail - 1);
+  if (mq_ptr->curr >= limit) {
+    return 0u;
+  }
+  return (size_t)(limit - mq_ptr->curr);
+}
 
 /* CLIENT */
 
