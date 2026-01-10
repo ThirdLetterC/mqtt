@@ -42,7 +42,7 @@ format:
     clang-format -i --style=file src/*.c include/mqtt.h examples/*.c examples/templates/*.h tests.c
 
 clean:
-    rm -rf {{bindir}} zig-out .zig-cache
+    rm -rf {{bindir}} zig-out .zig-cache *.o
 
 bin-dir:
     mkdir -p {{bindir}}
