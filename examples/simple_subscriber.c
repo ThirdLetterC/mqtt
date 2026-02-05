@@ -10,8 +10,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "mqtt/mqtt.h"
 #include "templates/posix_sockets.h"
-#include <mqtt.h>
 
 /**
  * @brief The function will be called whenever a PUBLISH message is received.

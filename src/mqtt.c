@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include <mqtt.h>
+#include "mqtt/mqtt.h"
 
 constexpr uint16_t MQTT_PID_LFSR_SEED = 163u;
 constexpr uint16_t MQTT_PID_LFSR_POLY = 0xB400u;

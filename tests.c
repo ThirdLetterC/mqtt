@@ -25,7 +25,7 @@
 #endif
 
 #include "examples/templates/posix_sockets.h"
-#include <mqtt.h>
+#include "mqtt/mqtt.h"
 
 #define assert_true(condition)                                                 \
   do {                                                                         \
@@ -845,8 +845,7 @@ static void TEST__api__connect_ping_disconnect([[maybe_unused]] void **unused) {
 
 static void
 TEST__api__publish_subscribe__single([[maybe_unused]] void **unused) {
-  alignas(struct mqtt_queued_message) uint8_t sendmem1[2048],
-      sendmem2[2048];
+  alignas(struct mqtt_queued_message) uint8_t sendmem1[2048], sendmem2[2048];
   uint8_t recvmem1[1024], recvmem2[1024];
   struct mqtt_client sender, receiver;
 
@@ -918,8 +917,8 @@ constexpr size_t TEST_SENDMEM_ALIGNED =
         TEST_SEND_ALIGNMENT;
 static void
 TEST__api__publish_subscribe__multiple([[maybe_unused]] void **unused) {
-  alignas(struct mqtt_queued_message)
-  uint8_t sendmem1[TEST_SENDMEM_ALIGNED], sendmem2[TEST_SENDMEM_ALIGNED];
+  alignas(struct mqtt_queued_message) uint8_t sendmem1[TEST_SENDMEM_ALIGNED],
+      sendmem2[TEST_SENDMEM_ALIGNED];
   uint8_t recvmem1[TEST_PACKET_SIZE], recvmem2[TEST_PACKET_SIZE];
   struct mqtt_client sender, receiver;
   ssize_t rv;

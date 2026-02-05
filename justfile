@@ -18,7 +18,7 @@ alias test := check
 
 all: build-tests build-examples
 
-build-examples: simple-examples reconnect-examples bio-examples openssl-examples
+build-examples: simple-examples reconnect-examples openssl-examples
 
 build-tests: bin-dir
     {{cc}} {{cflags}} tests.c {{sources}} {{msflags}} {{ldflags}} -o {{bindir}}/tests
@@ -29,9 +29,6 @@ simple-examples: bin-dir
 reconnect-examples: bin-dir
     for example in reconnect_subscriber; do {{cc}} {{cflags}} examples/${example}.c {{sources}} -lpthread {{msflags}} {{ldflags}} -o {{bindir}}/${example}; done
 
-bio-examples: bin-dir
-    for example in bio_publisher; do {{cc}} {{cflags}} $(pkg-config --cflags openssl) -D MQTT_USE_BIO examples/${example}.c {{sources}} -lpthread {{msflags}} $(pkg-config --libs openssl) {{ldflags}} -o {{bindir}}/${example}; done
-
 openssl-examples: bin-dir
     for example in openssl_publisher; do {{cc}} {{cflags}} $(pkg-config --cflags openssl) -D MQTT_USE_BIO examples/${example}.c {{sources}} -lpthread {{msflags}} $(pkg-config --libs openssl) {{ldflags}} -o {{bindir}}/${example}; done
 
@@ -39,7 +36,7 @@ check: build-tests
     ./{{bindir}}/tests
 
 format:
-    clang-format -i --style=file src/*.c include/mqtt.h examples/*.c examples/templates/*.h tests.c
+    clang-format -i --style=file src/*.c include/mqtt/mqtt.h examples/*.c examples/templates/*.h tests.c
 
 fmt: format
 

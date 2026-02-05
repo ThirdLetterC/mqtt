@@ -9,8 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <mqtt.h>
-
+#include "mqtt/mqtt.h"
 #include "templates/bearssl_sockets.h"
 
 typedef struct {

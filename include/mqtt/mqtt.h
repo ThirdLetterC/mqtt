@@ -44,7 +44,7 @@ extern "C" {
 #define MQTTC_STR(x) MQTTC_STR2(x)
 #include MQTTC_STR(MQTTC_PAL_FILE)
 #else
-#include <mqtt_pal.h>
+#include "mqtt/mqtt_pal.h"
 #endif /* MQTT_PAL_FILE */
 
 /**
@@ -186,7 +186,7 @@ struct mqtt_fixed_header {
  * MQTT v3.1.1: CONNECT Variable Header.
  * </a>
  */
-static constexpr uint8_t MQTT_PROTOCOL_LEVEL = 0x04;
+[[maybe_unused]] static constexpr uint8_t MQTT_PROTOCOL_LEVEL = 0x04;
 
 /**
  * @brief A macro used to declare the enum MQTTErrors and associated
@@ -297,7 +297,7 @@ uint16_t __mqtt_unpack_uint16(const uint8_t *buf);
 ssize_t __mqtt_pack_str(uint8_t *buf, const char *str);
 
 /** @brief A macro to get the MQTT string length from a c-string. */
-[[nodiscard]]
+[[nodiscard]] [[maybe_unused]]
 static inline size_t __mqtt_packed_cstrlen(const char *str) {
   if (str == nullptr) {
     return 2u;
@@ -885,7 +885,8 @@ ssize_t mqtt_pack_pubxxx_request(uint8_t *buf, size_t bufsz,
  *
  * @see mqtt_pack_subscribe_request
  */
-static constexpr size_t MQTT_SUBSCRIBE_REQUEST_MAX_NUM_TOPICS = 8u;
+[[maybe_unused]] static constexpr size_t MQTT_SUBSCRIBE_REQUEST_MAX_NUM_TOPICS =
+    8u;
 
 /**
  * @brief Serialize a SUBSCRIBE packet and put it in \p buf.
@@ -923,7 +924,8 @@ ssize_t mqtt_pack_subscribe_request(uint8_t *buf, size_t bufsz,
  *
  * @see mqtt_pack_unsubscribe_request
  */
-static constexpr size_t MQTT_UNSUBSCRIBE_REQUEST_MAX_NUM_TOPICS = 8u;
+[[maybe_unused]] static constexpr size_t
+    MQTT_UNSUBSCRIBE_REQUEST_MAX_NUM_TOPICS = 8u;
 
 /**
  * @brief Serialize a UNSUBSCRIBE packet and put it in \p buf.
@@ -1149,7 +1151,7 @@ mqtt_mq_find(const struct mqtt_message_queue *mq,
  *
  * @returns The mqtt_queued_message at \p index.
  */
-[[nodiscard]] static inline struct mqtt_queued_message *
+[[nodiscard]] [[maybe_unused]] static inline struct mqtt_queued_message *
 mqtt_mq_get(const struct mqtt_message_queue *mq_ptr, ptrdiff_t index) {
   return ((struct mqtt_queued_message *)((mq_ptr)->mem_end)) - 1 - index;
 }
@@ -1158,7 +1160,7 @@ mqtt_mq_get(const struct mqtt_message_queue *mq_ptr, ptrdiff_t index) {
  * @brief Returns the number of messages in the message queue, \p mq_ptr.
  * @ingroup details
  */
-[[nodiscard]] static inline ptrdiff_t
+[[nodiscard]] [[maybe_unused]] static inline ptrdiff_t
 mqtt_mq_length(const struct mqtt_message_queue *mq_ptr) {
   return ((struct mqtt_queued_message *)(mq_ptr->mem_end)) - mq_ptr->queue_tail;
 }
@@ -1167,7 +1169,7 @@ mqtt_mq_length(const struct mqtt_message_queue *mq_ptr) {
  * @brief Used internally to recalculate the \c curr_sz.
  * @ingroup details
  */
-[[nodiscard]] static inline size_t
+[[nodiscard]] [[maybe_unused]] static inline size_t
 mqtt_mq_currsz(const struct mqtt_message_queue *mq_ptr) {
   auto const limit = (uint8_t *)((mq_ptr)->queue_tail - 1);
   if (mq_ptr->curr >= limit) {

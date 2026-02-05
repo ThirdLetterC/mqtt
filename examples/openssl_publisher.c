@@ -9,8 +9,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "mqtt/mqtt.h"
 #include "templates/openssl_sockets.h"
-#include <mqtt.h>
 
 /**
  * @brief The function that would be called whenever a PUBLISH is received.
