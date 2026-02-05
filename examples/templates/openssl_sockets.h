@@ -22,6 +22,11 @@ void open_nb_socket(BIO **bio, SSL_CTX **ssl_ctx, const char *addr,
                     const char *port, const char *ca_file, const char *ca_path,
                     const char *cert_file, const char *key_file) {
   *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+  if (*ssl_ctx == nullptr) {
+    printf("error: failed to initialize SSL context\n");
+    *bio = nullptr;
+    return;
+  }
   SSL *ssl;
 
   /* load certificate */
@@ -43,20 +48,24 @@ void open_nb_socket(BIO **bio, SSL_CTX **ssl_ctx, const char *addr,
   }
 
   /* open BIO socket */
-  char *addr_copy = (char *)malloc(strlen(addr) + 1);
-  strcpy(addr_copy, addr);
-  char *port_copy = (char *)malloc(strlen(port) + 1);
-  strcpy(port_copy, port);
-
   *bio = BIO_new_ssl_connect(*ssl_ctx);
+  if (*bio == nullptr) {
+    SSL_CTX_free(*ssl_ctx);
+    *ssl_ctx = nullptr;
+    return;
+  }
   BIO_get_ssl(*bio, &ssl);
+  if (ssl == nullptr) {
+    BIO_free_all(*bio);
+    SSL_CTX_free(*ssl_ctx);
+    *bio = nullptr;
+    *ssl_ctx = nullptr;
+    return;
+  }
   SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-  BIO_set_conn_hostname(*bio, addr_copy);
+  BIO_set_conn_hostname(*bio, addr);
   BIO_set_nbio(*bio, 1);
-  BIO_set_conn_port(*bio, port_copy);
-
-  free(addr_copy);
-  free(port_copy);
+  BIO_set_conn_port(*bio, port);
 
   /* wait for connect with 10 second timeout */
   int start_time = (int)time(nullptr);
@@ -78,7 +87,11 @@ void open_nb_socket(BIO **bio, SSL_CTX **ssl_ctx, const char *addr,
   if (SSL_get_verify_result(ssl) != X509_V_OK) {
     /* Handle the failed verification */
     printf("error: x509 certificate verification failed\n");
-    exit(1);
+    BIO_free_all(*bio);
+    SSL_CTX_free(*ssl_ctx);
+    *bio = nullptr;
+    *ssl_ctx = nullptr;
+    return;
   }
 }
 

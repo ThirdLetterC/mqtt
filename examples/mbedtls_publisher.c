@@ -35,7 +35,7 @@ static void *client_refresher(void *client);
  * @brief Safelty closes the \p sockfd and cancels the \p client_daemon before
  * \c exit.
  */
-static void exit_example(int status, mqtt_pal_socket_handle sockfd,
+static void exit_example(int status, struct mbedtls_context *ctx,
                          pthread_t *client_daemon);
 
 /**
@@ -49,8 +49,6 @@ int main(int argc, const char *argv[]) {
   const char *ca_file;
 
   struct mbedtls_context ctx;
-  mqtt_pal_socket_handle sockfd;
-
   if (argc > 1) {
     ca_file = argv[1];
   } else {
@@ -81,10 +79,10 @@ int main(int argc, const char *argv[]) {
 
   /* open the non-blocking TCP socket (connecting to the broker) */
   open_nb_socket(&ctx, addr, port, ca_file);
-  sockfd = &ctx.ssl_ctx;
+  mqtt_pal_socket_handle sockfd = &ctx.ssl_ctx;
 
   if (sockfd == nullptr) {
-    exit_example(EXIT_FAILURE, sockfd, nullptr);
+    exit_example(EXIT_FAILURE, &ctx, nullptr);
   }
 
   /* setup a client */
@@ -101,7 +99,7 @@ int main(int argc, const char *argv[]) {
   /* check that we don't have any errors */
   if (client.error != MQTT_OK) {
     fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
-    exit_example(EXIT_FAILURE, sockfd, nullptr);
+    exit_example(EXIT_FAILURE, &ctx, nullptr);
   }
 
   /* start a thread to refresh the client (handle egress and ingree client
@@ -109,7 +107,7 @@ int main(int argc, const char *argv[]) {
   pthread_t client_daemon;
   if (pthread_create(&client_daemon, nullptr, client_refresher, &client)) {
     fprintf(stderr, "Failed to start client daemon.\n");
-    exit_example(EXIT_FAILURE, sockfd, nullptr);
+    exit_example(EXIT_FAILURE, &ctx, nullptr);
   }
 
   /* start publishing the time */
@@ -137,7 +135,7 @@ int main(int argc, const char *argv[]) {
     /* check for errors */
     if (client.error != MQTT_OK) {
       fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
-      exit_example(EXIT_FAILURE, sockfd, &client_daemon);
+      exit_example(EXIT_FAILURE, &ctx, &client_daemon);
     }
   }
 
@@ -146,15 +144,21 @@ int main(int argc, const char *argv[]) {
   sleep(1);
 
   /* exit */
-  exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+  exit_example(EXIT_SUCCESS, &ctx, &client_daemon);
 }
 
-static void exit_example(int status, mqtt_pal_socket_handle sockfd,
+static void exit_example(int status, struct mbedtls_context *ctx,
                          pthread_t *client_daemon) {
   if (client_daemon != nullptr)
     pthread_cancel(*client_daemon);
-  mbedtls_ssl_free(sockfd);
-  /* XXX free the rest of contexts */
+  if (ctx != nullptr) {
+    mbedtls_ssl_free(&ctx->ssl_ctx);
+    mbedtls_ssl_config_free(&ctx->ssl_conf);
+    mbedtls_x509_crt_free(&ctx->ca_crt);
+    mbedtls_ctr_drbg_free(&ctx->ctr_drbg);
+    mbedtls_entropy_free(&ctx->entropy);
+    mbedtls_net_free(&ctx->net_ctx);
+  }
   exit(status);
 }
 

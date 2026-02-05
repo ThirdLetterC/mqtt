@@ -988,8 +988,7 @@ TEST__api__publish_subscribe__multiple([[maybe_unused]] void **unused) {
 
   /* publish with retain */
   fill_payload(payload, sizeof(payload), "this was initial retain with qos 1");
-  if ((rv = mqtt_publish(&sender, "liam-test-ret1", payload,
-                         sizeof(payload),
+  if ((rv = mqtt_publish(&sender, "liam-test-ret1", payload, sizeof(payload),
                          MQTT_PUBLISH_QOS_1 | MQTT_PUBLISH_RETAIN)) <= 0) {
     printf("error: %s\n", mqtt_error_str(rv));
     assert_true(rv > 0);

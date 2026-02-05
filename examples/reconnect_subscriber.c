@@ -183,7 +183,12 @@ publish_callback([[maybe_unused]] void **unused,
                  [[maybe_unused]] struct mqtt_response_publish *published) {
   /* note that published->topic_name is NOT null-terminated (here we'll change
    * it to a c-string) */
-  char *topic_name = (char *)malloc(published->topic_name_size + 1);
+  char *topic_name =
+      (char *)calloc(published->topic_name_size + 1u, sizeof(char));
+  if (topic_name == nullptr) {
+    fprintf(stderr, "Failed to allocate topic buffer\n");
+    return;
+  }
   memcpy(topic_name, published->topic_name, published->topic_name_size);
   topic_name[published->topic_name_size] = '\0';
 

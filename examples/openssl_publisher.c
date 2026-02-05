@@ -35,7 +35,8 @@ static void *client_refresher(void *client);
  * @brief Safelty closes the \p sockfd and cancels the \p client_daemon before
  * \c exit.
  */
-static void exit_example(int status, BIO *sockfd, pthread_t *client_daemon);
+static void exit_example(int status, BIO *sockfd, SSL_CTX *ssl_ctx,
+                         pthread_t *client_daemon);
 
 /**
  * A simple program to that publishes the current time whenever ENTER is
@@ -54,7 +55,7 @@ int main(int argc, const char *argv[]) {
   OpenSSL_add_all_algorithms();
   SSL_library_init();
 
-  SSL_CTX *ssl_ctx;
+  SSL_CTX *ssl_ctx = nullptr;
   BIO *sockfd;
 
   if (argc > 1) {
@@ -104,7 +105,7 @@ int main(int argc, const char *argv[]) {
                  key_file);
 
   if (sockfd == nullptr) {
-    exit_example(EXIT_FAILURE, sockfd, nullptr);
+    exit_example(EXIT_FAILURE, sockfd, ssl_ctx, nullptr);
   }
 
   /* setup a client */
@@ -121,7 +122,7 @@ int main(int argc, const char *argv[]) {
   /* check that we don't have any errors */
   if (client.error != MQTT_OK) {
     fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
-    exit_example(EXIT_FAILURE, sockfd, nullptr);
+    exit_example(EXIT_FAILURE, sockfd, ssl_ctx, nullptr);
   }
 
   /* start a thread to refresh the client (handle egress and ingree client
@@ -129,7 +130,7 @@ int main(int argc, const char *argv[]) {
   pthread_t client_daemon;
   if (pthread_create(&client_daemon, nullptr, client_refresher, &client)) {
     fprintf(stderr, "Failed to start client daemon.\n");
-    exit_example(EXIT_FAILURE, sockfd, nullptr);
+    exit_example(EXIT_FAILURE, sockfd, ssl_ctx, nullptr);
   }
 
   /* start publishing the time */
@@ -157,7 +158,7 @@ int main(int argc, const char *argv[]) {
     /* check for errors */
     if (client.error != MQTT_OK) {
       fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
-      exit_example(EXIT_FAILURE, sockfd, &client_daemon);
+      exit_example(EXIT_FAILURE, sockfd, ssl_ctx, &client_daemon);
     }
   }
 
@@ -166,12 +167,15 @@ int main(int argc, const char *argv[]) {
   sleep(1);
 
   /* exit */
-  exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+  exit_example(EXIT_SUCCESS, sockfd, ssl_ctx, &client_daemon);
 }
 
-static void exit_example(int status, BIO *sockfd, pthread_t *client_daemon) {
+static void exit_example(int status, BIO *sockfd, SSL_CTX *ssl_ctx,
+                         pthread_t *client_daemon) {
   if (sockfd != nullptr)
     BIO_free_all(sockfd);
+  if (ssl_ctx != nullptr)
+    SSL_CTX_free(ssl_ctx);
   if (client_daemon != nullptr)
     pthread_cancel(*client_daemon);
   exit(status);

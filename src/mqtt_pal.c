@@ -205,7 +205,7 @@ static int do_rec_data(mqtt_pal_socket_handle fd, unsigned int status) {
 
       br_ssl_engine_recvrec_ack(&fd->sc.eng, rc);
     }
-  } else if ((status && BR_SSL_CLOSED) == BR_SSL_CLOSED) {
+  } else if ((status & BR_SSL_CLOSED) == BR_SSL_CLOSED) {
     return MQTT_ERROR_SOCKET_ERROR;
   }
 

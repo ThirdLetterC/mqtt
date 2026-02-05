@@ -57,17 +57,13 @@ enum MQTTErrors mqtt_sync(struct mqtt_client *client) {
   enum MQTTErrors err = MQTT_OK;
   bool reconnecting = false;
   MQTT_PAL_MUTEX_LOCK(&client->mutex);
-  bool mutex_locked = true;
   if (client->error != MQTT_ERROR_RECONNECTING && client->error != MQTT_OK &&
       client->reconnect_callback != nullptr) {
+    /* reconnect callback is expected to leave the mutex unlocked via
+     * mqtt_connect/mqtt_reinit sequencing */
     client->reconnect_callback(client, &client->reconnect_state);
     if (client->error != MQTT_OK) {
       client->error = MQTT_ERROR_RECONNECT_FAILED;
-    }
-    /* normally unlocked during CONNECT */
-    if (mutex_locked) {
-      MQTT_PAL_MUTEX_UNLOCK(&client->mutex);
-      mutex_locked = false;
     }
     err = client->error;
 
@@ -80,10 +76,7 @@ enum MQTTErrors mqtt_sync(struct mqtt_client *client) {
       reconnecting = true;
       client->error = MQTT_OK;
     }
-    if (mutex_locked) {
-      MQTT_PAL_MUTEX_UNLOCK(&client->mutex);
-      mutex_locked = false;
-    }
+    MQTT_PAL_MUTEX_UNLOCK(&client->mutex);
   }
 
   /* Call inspector callback if necessary */
@@ -407,10 +400,10 @@ enum MQTTErrors mqtt_subscribe(struct mqtt_client *client,
 
 enum MQTTErrors mqtt_unsubscribe(struct mqtt_client *client,
                                  const char *topic_name) {
-  auto const packet_id = __mqtt_next_pid(client);
   ssize_t rv;
   struct mqtt_queued_message *msg;
   MQTT_PAL_MUTEX_LOCK(&client->mutex);
+  auto const packet_id = __mqtt_next_pid(client);
 
   /* try to pack the message */
   MQTT_CLIENT_TRY_PACK(rv, msg, client,
@@ -794,7 +787,7 @@ ssize_t __mqtt_recv(struct mqtt_client *client) {
       /* update response time */
       mqtt_update_typical_response_time(client, msg->time_sent);
       /* stage PUBCOMP */
-      rv = __mqtt_pubcomp(client, response.decoded.pubrec.packet_id);
+      rv = __mqtt_pubcomp(client, response.decoded.pubrel.packet_id);
       if (rv != MQTT_OK) {
         client->error = (enum MQTTErrors)rv;
         mqtt_recv_ret = rv;

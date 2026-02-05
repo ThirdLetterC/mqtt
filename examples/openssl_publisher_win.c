@@ -35,7 +35,7 @@ static void client_refresher(void *client);
  * @brief Safelty closes the \p sockfd and cancels the \p client_daemon before
  * \c exit.
  */
-static void exit_example(int status, BIO *sockfd);
+static void exit_example(int status, BIO *sockfd, SSL_CTX *ssl_ctx);
 
 /**
  * A simple program to that publishes the current time whenever ENTER is
@@ -53,7 +53,7 @@ int main(int argc, const char *argv[]) {
   OpenSSL_add_all_algorithms();
   SSL_library_init();
 
-  SSL_CTX *ssl_ctx;
+  SSL_CTX *ssl_ctx = nullptr;
   BIO *sockfd;
 
   if (argc > 1) {
@@ -85,10 +85,11 @@ int main(int argc, const char *argv[]) {
   }
 
   /* open the non-blocking TCP socket (connecting to the broker) */
-  open_nb_socket(&sockfd, &ssl_ctx, addr, port, ca_file, nullptr);
+  open_nb_socket(&sockfd, &ssl_ctx, addr, port, ca_file, nullptr, nullptr,
+                 nullptr);
 
   if (sockfd == nullptr) {
-    exit_example(EXIT_FAILURE, sockfd);
+    exit_example(EXIT_FAILURE, sockfd, ssl_ctx);
   }
 
   /* setup a client */
@@ -105,14 +106,14 @@ int main(int argc, const char *argv[]) {
   /* check that we don't have any errors */
   if (client.error != MQTT_OK) {
     fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
-    exit_example(EXIT_FAILURE, sockfd);
+    exit_example(EXIT_FAILURE, sockfd, ssl_ctx);
   }
 
   /* start a thread to refresh the client (handle egress and ingree client
    * traffic) */
   if (_beginthread(client_refresher, 0, &client) == -1) {
     fprintf(stderr, "Failed to start client daemon.\n");
-    exit_example(EXIT_FAILURE, sockfd);
+    exit_example(EXIT_FAILURE, sockfd, ssl_ctx);
   }
 
   /* start publishing the time */
@@ -140,7 +141,7 @@ int main(int argc, const char *argv[]) {
     /* check for errors */
     if (client.error != MQTT_OK) {
       fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
-      exit_example(EXIT_FAILURE, sockfd);
+      exit_example(EXIT_FAILURE, sockfd, ssl_ctx);
     }
   }
 
@@ -149,12 +150,14 @@ int main(int argc, const char *argv[]) {
   Sleep(1000);
 
   /* exit */
-  exit_example(EXIT_SUCCESS, sockfd);
+  exit_example(EXIT_SUCCESS, sockfd, ssl_ctx);
 }
 
-static void exit_example(int status, BIO *sockfd) {
+static void exit_example(int status, BIO *sockfd, SSL_CTX *ssl_ctx) {
   if (sockfd != nullptr)
     BIO_free_all(sockfd);
+  if (ssl_ctx != nullptr)
+    SSL_CTX_free(ssl_ctx);
   exit(status);
 }
 
