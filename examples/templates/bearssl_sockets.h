@@ -1,5 +1,4 @@
-#if !defined(__BEARSSL_SOCKET_TEMPLATE_H__)
-#define __BEARSSL_SOCKET_TEMPLATE_H__
+#pragma once
 
 #include <errno.h>
 #include <fcntl.h>
@@ -131,5 +130,3 @@ int close_socket(bearssl_context *ctx) {
 
   return rc;
 }
-
-#endif

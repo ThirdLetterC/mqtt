@@ -1,5 +1,4 @@
-#if !defined(__MQTT_PAL_H__)
-#define __MQTT_PAL_H__
+#pragma once
 
 /*
 MIT License
@@ -204,6 +203,4 @@ ssize_t mqtt_pal_recvall(mqtt_pal_socket_handle fd, void *buf, size_t bufsz,
 
 #if defined(__cplusplus)
 }
-#endif
-
 #endif

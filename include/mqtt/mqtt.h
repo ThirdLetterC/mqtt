@@ -1,5 +1,4 @@
-#if !defined(__MQTT_H__)
-#define __MQTT_H__
+#pragma once
 
 #include <stddef.h>
 #include <stdint.h>
@@ -1736,6 +1735,4 @@ enum MQTTErrors mqtt_reconnect(struct mqtt_client *client);
 
 #if defined(__cplusplus)
 }
-#endif
-
 #endif
