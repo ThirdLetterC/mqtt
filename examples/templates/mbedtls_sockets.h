@@ -1,5 +1,4 @@
-#if !defined(__MBEDTLS_SOCKET_TEMPLATE_H__)
-#define __MBEDTLS_SOCKET_TEMPLATE_H__
+#pragma once
 
 #include <inttypes.h>
 #include <stddef.h>
@@ -145,5 +144,3 @@ void open_nb_socket(struct mbedtls_context *ctx, const char *hostname,
     }
   }
 }
-
-#endif

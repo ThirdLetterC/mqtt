@@ -1,5 +1,4 @@
-#if !defined(__OPENSSL_SOCKET_TEMPLATE_H__)
-#define __OPENSSL_SOCKET_TEMPLATE_H__
+#pragma once
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -94,5 +93,3 @@ void open_nb_socket(BIO **bio, SSL_CTX **ssl_ctx, const char *addr,
     return;
   }
 }
-
-#endif

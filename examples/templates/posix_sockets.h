@@ -1,5 +1,4 @@
-#if !defined(__POSIX_SOCKET_TEMPLATE_H__)
-#define __POSIX_SOCKET_TEMPLATE_H__
+#pragma once
 
 #include <stddef.h>
 #include <stdio.h>
@@ -81,5 +80,3 @@ int open_nb_socket(const char *addr, const char *port) {
   /* return the new socket fd */
   return sockfd;
 }
-
-#endif

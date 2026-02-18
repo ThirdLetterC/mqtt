@@ -1,5 +1,4 @@
-#if !defined(__BIO_SOCKET_TEMPLATE_H__)
-#define __BIO_SOCKET_TEMPLATE_H__
+#pragma once
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -28,5 +27,3 @@ BIO *open_nb_socket(const char *addr, const char *port) {
 
   return bio;
 }
-
-#endif
