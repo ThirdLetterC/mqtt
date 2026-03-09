@@ -1,6 +1,4 @@
-#include <errno.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -24,7 +22,7 @@
 #define close(sock) closesocket(sock)
 #endif
 
-#include "examples/templates/posix_sockets.h"
+#include "../examples/templates/posix_sockets.h"
 #include "mqtt/mqtt.h"
 
 #define assert_true(condition)                                                 \
@@ -53,6 +51,9 @@ struct test_case {
   const char *name;
   void (*fn)(void **);
 };
+
+static void publish_callback(void **state,
+                             struct mqtt_response_publish *publish);
 
 static void run_test(const struct test_case test) {
   void *state = nullptr;
@@ -656,6 +657,32 @@ static void TEST__framing__ping([[maybe_unused]] void **state) {
   assert_true(fixed_header->remaining_length == 0);
 }
 
+static void TEST__framing__oversized_request_rejected(
+    [[maybe_unused]] void **state) {
+  uint8_t buf[64];
+  char *too_long = (char *)calloc((size_t)UINT16_MAX + 2u, sizeof(char));
+
+  assert_true(too_long != nullptr);
+  memset(too_long, 'a', (size_t)UINT16_MAX + 1u);
+  too_long[(size_t)UINT16_MAX + 1u] = '\0';
+
+  assert_true(mqtt_pack_publish_request(buf, sizeof(buf), too_long, 1u, "x", 1u,
+                                        MQTT_PUBLISH_QOS_0) ==
+              MQTT_ERROR_MALFORMED_REQUEST);
+  assert_true(mqtt_pack_connection_request(buf, sizeof(buf), "client", "topic",
+                                           buf, (size_t)UINT16_MAX + 1u,
+                                           nullptr, nullptr, 0u, 30u) ==
+              MQTT_ERROR_MALFORMED_REQUEST);
+  assert_true(mqtt_pack_subscribe_request(buf, sizeof(buf), 1u,
+                                          (const char *)nullptr) ==
+              MQTT_ERROR_MALFORMED_REQUEST);
+  assert_true(mqtt_pack_unsubscribe_request(buf, sizeof(buf), 1u,
+                                            (const char *)nullptr) ==
+              MQTT_ERROR_MALFORMED_REQUEST);
+
+  free(too_long);
+}
+
 static void TEST__utility__ping([[maybe_unused]] void **state) {
   uint8_t buf[256];
   struct mqtt_client client;
@@ -786,6 +813,19 @@ static void TEST__utility__message_queue([[maybe_unused]] void **unused) {
   assert_true((void *)mq.queue_tail == mq.mem_end);
 }
 
+static void TEST__utility__message_queue_tiny_buffer(
+    [[maybe_unused]] void **unused) {
+  alignas(struct mqtt_queued_message) uint8_t mem[QM_SZ - 1];
+  struct mqtt_message_queue mq;
+
+  mqtt_mq_init(&mq, mem, sizeof(mem));
+
+  assert_true(mqtt_mq_length(&mq) == 0);
+  assert_true(mq.curr == mem);
+  assert_true(mq.curr_sz == 0);
+  assert_true((void *)mq.queue_tail == mq.mem_end);
+}
+
 static void TEST__utility__pid_lfsr([[maybe_unused]] void **unused) {
   struct mqtt_client client;
   uint8_t send[256], recv[256];
@@ -797,6 +837,83 @@ static void TEST__utility__pid_lfsr([[maybe_unused]] void **unused) {
     period++;
   } while (client.pid_lfsr != 163u && client.pid_lfsr != 0);
   assert_true(period == 65535u);
+}
+
+static void TEST__utility__client_state_reset([[maybe_unused]] void **unused) {
+  alignas(struct mqtt_queued_message) uint8_t send[256];
+  uint8_t recv[128];
+  struct mqtt_client client = {0};
+  int state = 123;
+
+  client.keep_alive = 12;
+  client.number_of_timeouts = 9;
+  client.number_of_keep_alives = 7;
+  client.typical_response_time = 1.5f;
+  client.pid_lfsr = 42u;
+  client.send_offset = 8u;
+  client.time_of_last_send = (mqtt_pal_time_t)99;
+  client.publish_response_callback_state = &state;
+
+  assert_true(mqtt_init(&client, -1, send, sizeof(send), recv, sizeof(recv),
+                        publish_callback) == MQTT_OK);
+  assert_true(client.keep_alive == 0);
+  assert_true(client.number_of_timeouts == 0);
+  assert_true(client.number_of_keep_alives == 0);
+  assert_true(client.typical_response_time == -1.0f);
+  assert_true(client.pid_lfsr == 0u);
+  assert_true(client.send_offset == 0u);
+  assert_true(client.time_of_last_send == 0);
+  assert_true(client.publish_response_callback == publish_callback);
+  assert_true(client.publish_response_callback_state == nullptr);
+
+  client.keep_alive = 22;
+  client.number_of_timeouts = 2;
+  client.number_of_keep_alives = 3;
+  client.typical_response_time = 4.5f;
+  client.pid_lfsr = 7u;
+  client.send_offset = 3u;
+  client.time_of_last_send = (mqtt_pal_time_t)88;
+  client.publish_response_callback_state = &state;
+  client.response_timeout = 77;
+
+  mqtt_reinit(&client, -1, send, sizeof(send), recv, sizeof(recv));
+  assert_true(client.keep_alive == 0);
+  assert_true(client.number_of_timeouts == 0);
+  assert_true(client.number_of_keep_alives == 0);
+  assert_true(client.typical_response_time == -1.0f);
+  assert_true(client.pid_lfsr == 0u);
+  assert_true(client.send_offset == 0u);
+  assert_true(client.time_of_last_send == 0);
+  assert_true(client.publish_response_callback == publish_callback);
+  assert_true(client.publish_response_callback_state == &state);
+  assert_true(client.response_timeout == 77);
+}
+
+static void TEST__utility__null_publish_callback([[maybe_unused]] void **unused) {
+  (void)unused;
+  alignas(struct mqtt_queued_message) uint8_t sendmem[256];
+  uint8_t recvmem[256];
+  struct mqtt_client client;
+  struct mqtt_response_publish publish = {
+      .dup_flag = 0u,
+      .qos_level = 1u,
+      .retain_flag = 0u,
+      .topic_name_size = 5u,
+      .topic_name = "topic",
+      .packet_id = 42u,
+      .application_message = "ok",
+      .application_message_size = 2u,
+  };
+
+  assert_true(mqtt_init(&client, -1, sendmem, sizeof(sendmem), recvmem,
+                        sizeof(recvmem), nullptr) == MQTT_OK);
+  client.error = MQTT_OK;
+
+  assert_true(__mqtt_handle_publish(&client, &publish) == MQTT_OK);
+  assert_true(client.error == MQTT_OK);
+  assert_true(mqtt_mq_length(&client.mq) == 1);
+  assert_true(mqtt_mq_get(&client.mq, 0)->control_type == MQTT_CONTROL_PUBACK);
+  assert_true(mqtt_mq_get(&client.mq, 0)->packet_id == 42u);
 }
 
 void publish_callback([[maybe_unused]] void **state,
@@ -1213,6 +1330,8 @@ int main(int argc, const char *argv[]) {
       {"framing__connect", TEST__framing__connect},
       {"framing__connack", TEST__framing__connack},
       {"framing__publish", TEST__framing__publish},
+      {"framing__oversized_request_rejected",
+       TEST__framing__oversized_request_rejected},
       {"framing__pubxxx", TEST__framing__pubxxx},
       {"framing__subscribe", TEST__framing__subscribe},
       {"framing__suback", TEST__framing__suback},
@@ -1227,7 +1346,11 @@ int main(int argc, const char *argv[]) {
 
   static const struct test_case util_tests[] = {
       {"utility__message_queue", TEST__utility__message_queue},
+      {"utility__message_queue_tiny_buffer",
+       TEST__utility__message_queue_tiny_buffer},
       {"utility__pid_lfsr", TEST__utility__pid_lfsr},
+      {"utility__client_state_reset", TEST__utility__client_state_reset},
+      {"utility__null_publish_callback", TEST__utility__null_publish_callback},
       {"utility__connect_disconnect", TEST__utility__connect_disconnect},
       {"utility__ping", TEST__utility__ping},
   };

@@ -1152,7 +1152,9 @@ mqtt_mq_find(const struct mqtt_message_queue *mq,
  */
 [[nodiscard]] [[maybe_unused]] static inline struct mqtt_queued_message *
 mqtt_mq_get(const struct mqtt_message_queue *mq_ptr, ptrdiff_t index) {
-  return ((struct mqtt_queued_message *)((mq_ptr)->mem_end)) - 1 - index;
+  return (struct mqtt_queued_message *)((uintptr_t)(mq_ptr->mem_end) -
+                                        sizeof(struct mqtt_queued_message) *
+                                            (size_t)(index + 1));
 }
 
 /**
@@ -1161,7 +1163,12 @@ mqtt_mq_get(const struct mqtt_message_queue *mq_ptr, ptrdiff_t index) {
  */
 [[nodiscard]] [[maybe_unused]] static inline ptrdiff_t
 mqtt_mq_length(const struct mqtt_message_queue *mq_ptr) {
-  return ((struct mqtt_queued_message *)(mq_ptr->mem_end)) - mq_ptr->queue_tail;
+  const uintptr_t mem_end = (uintptr_t)mq_ptr->mem_end;
+  const uintptr_t queue_tail = (uintptr_t)mq_ptr->queue_tail;
+  if (queue_tail > mem_end) {
+    return 0;
+  }
+  return (ptrdiff_t)((mem_end - queue_tail) / sizeof(struct mqtt_queued_message));
 }
 
 /**
@@ -1170,11 +1177,17 @@ mqtt_mq_length(const struct mqtt_message_queue *mq_ptr) {
  */
 [[nodiscard]] [[maybe_unused]] static inline size_t
 mqtt_mq_currsz(const struct mqtt_message_queue *mq_ptr) {
-  auto const limit = (uint8_t *)((mq_ptr)->queue_tail - 1);
-  if (mq_ptr->curr >= limit) {
+  const uintptr_t mem_start = (uintptr_t)mq_ptr->mem_start;
+  const uintptr_t queue_tail = (uintptr_t)mq_ptr->queue_tail;
+  if (queue_tail < mem_start + sizeof(struct mqtt_queued_message)) {
     return 0u;
   }
-  return (size_t)(limit - mq_ptr->curr);
+  const uintptr_t limit = queue_tail - sizeof(struct mqtt_queued_message);
+  const uintptr_t curr = (uintptr_t)mq_ptr->curr;
+  if (curr >= limit) {
+    return 0u;
+  }
+  return (size_t)(limit - curr);
 }
 
 /* CLIENT */
@@ -1256,6 +1269,10 @@ struct mqtt_client {
    * Any topics that you have subscribed to will be returned from the broker as
    * mqtt_response_publish messages. All the publishes received from the broker
    * will be passed to this function.
+   *
+   * @note If this callback is nullptr, inbound publishes are still parsed and
+   *       acknowledged as required by the protocol, but the decoded publish is
+   *       discarded after protocol handling completes.
    *
    * @note A pointer to publish_response_callback_state is always passed to the
    * callback. Use publish_response_callback_state to keep track of any state
@@ -1369,6 +1386,18 @@ ssize_t __mqtt_send(struct mqtt_client *client);
 ssize_t __mqtt_recv(struct mqtt_client *client);
 
 /**
+ * @brief Performs protocol handling for a decoded inbound publish.
+ * @ingroup details
+ *
+ * @param client The MQTT client.
+ * @param publish The decoded publish response.
+ *
+ * @returns MQTT_OK upon success, an \ref MQTTErrors otherwise.
+ */
+ssize_t __mqtt_handle_publish(struct mqtt_client *client,
+                              struct mqtt_response_publish *publish);
+
+/**
  * @brief Function that does the actual sending and receiving of
  *        traffic from the network.
  * @ingroup api
@@ -1428,6 +1457,9 @@ enum MQTTErrors mqtt_sync(struct mqtt_client *client);
  * passed as the
  *       \c state argument to \p publish_response_callback. Note that the second
  * argument is the mqtt_response_publish that was received from the broker.
+ * @note If \p publish_response_callback is nullptr, incoming publishes are
+ *       safely discarded after MQTT-C completes any required protocol-level
+ *       acknowledgements.
  *
  * @attention Only initialize an MQTT client once (i.e. don't call \ref
  * mqtt_init or
@@ -1501,6 +1533,9 @@ enum MQTTErrors mqtt_init(
  * reconnect_callback.
  * @param[in] publish_response_callback The callback to call whenever
  * application messages are received from the broker.
+ * @note If \p publish_response_callback is nullptr, incoming publishes are
+ *       safely discarded after MQTT-C completes any required protocol-level
+ *       acknowledgements.
  *
  * @post Call \p reconnect_callback yourself, or call \ref mqtt_sync
  *       (which will trigger the call to \p reconnect_callback).

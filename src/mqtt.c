@@ -52,6 +52,54 @@ mqtt_update_typical_response_time(struct mqtt_client *client,
       MQTT_RESPONSE_SMOOTHING_BETA * response_time;
 }
 
+[[nodiscard]] static inline bool mqtt_size_add(size_t lhs, size_t rhs,
+                                               size_t *sum) {
+  if (lhs > SIZE_MAX - rhs) {
+    return false;
+  }
+  *sum = lhs + rhs;
+  return true;
+}
+
+[[nodiscard]] static inline bool
+mqtt_remaining_length_add(size_t *remaining_length, size_t amount) {
+  size_t next = 0;
+  if (!mqtt_size_add(*remaining_length, amount, &next)) {
+    return false;
+  }
+  if (next >= MQTT_MAX_REMAINING_LENGTH) {
+    return false;
+  }
+  *remaining_length = next;
+  return true;
+}
+
+[[nodiscard]] static inline bool mqtt_mqtt_string_size(const char *str,
+                                                       size_t *packed_size) {
+  if (str == nullptr) {
+    *packed_size = 2u;
+    return true;
+  }
+
+  const size_t string_size = strlen(str);
+  if (string_size > UINT16_MAX) {
+    return false;
+  }
+
+  *packed_size = 2u + string_size;
+  return true;
+}
+
+static inline void mqtt_reset_session_state(struct mqtt_client *client) {
+  client->keep_alive = 0;
+  client->number_of_timeouts = 0;
+  client->number_of_keep_alives = 0;
+  client->typical_response_time = MQTT_UNKNOWN_RESPONSE_TIME;
+  client->pid_lfsr = 0;
+  client->send_offset = 0;
+  client->time_of_last_send = 0;
+}
+
 enum MQTTErrors mqtt_sync(struct mqtt_client *client) {
   /* Recover from any errors */
   enum MQTTErrors err = MQTT_OK;
@@ -123,8 +171,8 @@ uint16_t __mqtt_next_pid(struct mqtt_client *client) {
 
     /* check that the PID is unique */
     pid_exists = false;
-    for (auto curr = mqtt_mq_get(&(client->mq), 0);
-         curr >= client->mq.queue_tail; --curr) {
+    for (ptrdiff_t i = 0; i < mqtt_mq_length(&client->mq); ++i) {
+      auto curr = mqtt_mq_get(&client->mq, i);
       if (curr->packet_id == client->pid_lfsr) {
         pid_exists = true;
         break;
@@ -159,12 +207,9 @@ enum MQTTErrors mqtt_init(
 
   client->error = MQTT_ERROR_CONNECT_NOT_CALLED;
   client->response_timeout = MQTT_DEFAULT_RESPONSE_TIMEOUT;
-  client->number_of_timeouts = 0;
-  client->number_of_keep_alives = 0;
-  client->typical_response_time = MQTT_UNKNOWN_RESPONSE_TIME;
+  mqtt_reset_session_state(client);
   client->publish_response_callback = publish_response_callback;
-  client->pid_lfsr = 0;
-  client->send_offset = 0;
+  client->publish_response_callback_state = nullptr;
 
   client->inspector_callback = nullptr;
   client->reconnect_callback = nullptr;
@@ -192,12 +237,9 @@ void mqtt_init_reconnect(
 
   client->error = MQTT_ERROR_INITIAL_RECONNECT;
   client->response_timeout = MQTT_DEFAULT_RESPONSE_TIMEOUT;
-  client->number_of_timeouts = 0;
-  client->number_of_keep_alives = 0;
-  client->typical_response_time = MQTT_UNKNOWN_RESPONSE_TIME;
+  mqtt_reset_session_state(client);
   client->publish_response_callback = publish_response_callback;
-  client->pid_lfsr = 0;
-  client->send_offset = 0;
+  client->publish_response_callback_state = nullptr;
 
   client->inspector_callback = nullptr;
   client->reconnect_callback = reconnect;
@@ -209,6 +251,7 @@ void mqtt_reinit(struct mqtt_client *client, mqtt_pal_socket_handle socketfd,
                  size_t recvbufsz) {
   client->error = MQTT_ERROR_CONNECT_NOT_CALLED;
   client->socketfd = socketfd;
+  mqtt_reset_session_state(client);
 
   mqtt_mq_init(&client->mq, sendbuf, sendbufsz);
 
@@ -608,6 +651,36 @@ ssize_t __mqtt_send(struct mqtt_client *client) {
   return MQTT_OK;
 }
 
+ssize_t __mqtt_handle_publish(struct mqtt_client *client,
+                              struct mqtt_response_publish *publish) {
+  ssize_t rv = MQTT_OK;
+
+  if (publish->qos_level == 1) {
+    rv = __mqtt_puback(client, publish->packet_id);
+    if (rv != MQTT_OK) {
+      return rv;
+    }
+  } else if (publish->qos_level == 2) {
+    /* check if this is a duplicate */
+    if (mqtt_mq_find(&client->mq, MQTT_CONTROL_PUBREC,
+                     &publish->packet_id) != nullptr) {
+      return MQTT_OK;
+    }
+
+    rv = __mqtt_pubrec(client, publish->packet_id);
+    if (rv != MQTT_OK) {
+      return rv;
+    }
+  }
+
+  if (client->publish_response_callback != nullptr) {
+    client->publish_response_callback(&client->publish_response_callback_state,
+                                      publish);
+  }
+
+  return MQTT_OK;
+}
+
 ssize_t __mqtt_recv(struct mqtt_client *client) {
   struct mqtt_response response;
   ssize_t mqtt_recv_ret = MQTT_OK;
@@ -710,31 +783,11 @@ ssize_t __mqtt_recv(struct mqtt_client *client) {
       }
       break;
     case MQTT_CONTROL_PUBLISH:
-      /* stage response, none if qos==0, PUBACK if qos==1, PUBREC if qos==2 */
-      if (response.decoded.publish.qos_level == 1) {
-        rv = __mqtt_puback(client, response.decoded.publish.packet_id);
-        if (rv != MQTT_OK) {
-          client->error = (enum MQTTErrors)rv;
-          mqtt_recv_ret = rv;
-          break;
-        }
-      } else if (response.decoded.publish.qos_level == 2) {
-        /* check if this is a duplicate */
-        if (mqtt_mq_find(&client->mq, MQTT_CONTROL_PUBREC,
-                         &response.decoded.publish.packet_id) != nullptr) {
-          break;
-        }
-
-        rv = __mqtt_pubrec(client, response.decoded.publish.packet_id);
-        if (rv != MQTT_OK) {
-          client->error = (enum MQTTErrors)rv;
-          mqtt_recv_ret = rv;
-          break;
-        }
+      rv = __mqtt_handle_publish(client, &response.decoded.publish);
+      if (rv != MQTT_OK) {
+        client->error = (enum MQTTErrors)rv;
+        mqtt_recv_ret = rv;
       }
-      /* call publish callback */
-      client->publish_response_callback(
-          &client->publish_response_callback_state, &response.decoded.publish);
       break;
     case MQTT_CONTROL_PUBACK:
       /* release associated PUBLISH */
@@ -1097,6 +1150,7 @@ ssize_t mqtt_pack_connection_request(
     const char *password, uint8_t connect_flags, uint16_t keep_alive) {
   struct mqtt_fixed_header fixed_header;
   size_t remaining_length;
+  size_t packed_size;
   const uint8_t *const start = buf;
   ssize_t rv;
 
@@ -1116,19 +1170,34 @@ ssize_t mqtt_pack_connection_request(
     return MQTT_ERROR_CLEAN_SESSION_IS_REQUIRED;
   }
   /* mqtt_string length is strlen + 2 */
-  remaining_length += __mqtt_packed_cstrlen(client_id);
+  if (!mqtt_mqtt_string_size(client_id, &packed_size)) {
+    return MQTT_ERROR_MALFORMED_REQUEST;
+  }
+  if (!mqtt_remaining_length_add(&remaining_length, packed_size)) {
+    return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+  }
 
   if (will_topic != nullptr) {
     uint8_t temp;
     /* there is a will */
     connect_flags |= MQTT_CONNECT_WILL_FLAG;
-    remaining_length += __mqtt_packed_cstrlen(will_topic);
+    if (!mqtt_mqtt_string_size(will_topic, &packed_size)) {
+      return MQTT_ERROR_MALFORMED_REQUEST;
+    }
+    if (!mqtt_remaining_length_add(&remaining_length, packed_size)) {
+      return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+    }
 
     if (will_message == nullptr) {
       /* if there's a will there MUST be a will message */
       return MQTT_ERROR_CONNECT_nullptr_WILL_MESSAGE;
     }
-    remaining_length += 2 + will_message_size; /* size of will_message */
+    if (will_message_size > UINT16_MAX) {
+      return MQTT_ERROR_MALFORMED_REQUEST;
+    }
+    if (!mqtt_remaining_length_add(&remaining_length, 2u + will_message_size)) {
+      return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+    }
 
     /* assert that the will QOS is valid (i.e. not 3) */
     temp = connect_flags & 0x18; /* mask to QOS */
@@ -1146,7 +1215,12 @@ ssize_t mqtt_pack_connection_request(
   if (user_name != nullptr) {
     /* a user name is present */
     connect_flags |= MQTT_CONNECT_USER_NAME;
-    remaining_length += __mqtt_packed_cstrlen(user_name);
+    if (!mqtt_mqtt_string_size(user_name, &packed_size)) {
+      return MQTT_ERROR_MALFORMED_REQUEST;
+    }
+    if (!mqtt_remaining_length_add(&remaining_length, packed_size)) {
+      return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+    }
   } else {
     connect_flags &= (uint8_t)~MQTT_CONNECT_USER_NAME;
   }
@@ -1154,7 +1228,12 @@ ssize_t mqtt_pack_connection_request(
   if (password != nullptr) {
     /* a password is present */
     connect_flags |= MQTT_CONNECT_PASSWORD;
-    remaining_length += __mqtt_packed_cstrlen(password);
+    if (!mqtt_mqtt_string_size(password, &packed_size)) {
+      return MQTT_ERROR_MALFORMED_REQUEST;
+    }
+    if (!mqtt_remaining_length_add(&remaining_length, packed_size)) {
+      return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+    }
   } else {
     connect_flags &= (uint8_t)~MQTT_CONNECT_PASSWORD;
   }
@@ -1262,7 +1341,8 @@ ssize_t mqtt_pack_publish_request(uint8_t *buf, size_t bufsz,
   const uint8_t *const start = buf;
   ssize_t rv;
   struct mqtt_fixed_header fixed_header;
-  uint32_t remaining_length;
+  size_t remaining_length = 0;
+  size_t packed_size = 0;
   uint8_t inspected_qos;
 
   /* check for null pointers */
@@ -1280,12 +1360,21 @@ ssize_t mqtt_pack_publish_request(uint8_t *buf, size_t bufsz,
   fixed_header.control_type = MQTT_CONTROL_PUBLISH;
 
   /* calculate remaining length */
-  remaining_length = (uint32_t)__mqtt_packed_cstrlen(topic_name);
-  if (inspected_qos > 0) {
-    remaining_length += 2;
+  if (!mqtt_mqtt_string_size(topic_name, &packed_size)) {
+    return MQTT_ERROR_MALFORMED_REQUEST;
   }
-  remaining_length += (uint32_t)application_message_size;
-  fixed_header.remaining_length = remaining_length;
+  if (!mqtt_remaining_length_add(&remaining_length, packed_size)) {
+    return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+  }
+  if (inspected_qos > 0) {
+    if (!mqtt_remaining_length_add(&remaining_length, 2u)) {
+      return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+    }
+  }
+  if (!mqtt_remaining_length_add(&remaining_length, application_message_size)) {
+    return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+  }
+  fixed_header.remaining_length = (uint32_t)remaining_length;
 
   /* force dup to 0 if qos is 0 [Spec MQTT-3.3.1-2] */
   if (inspected_qos == 0) {
@@ -1474,6 +1563,7 @@ ssize_t mqtt_pack_subscribe_request(uint8_t *buf, size_t bufsz,
   const uint8_t *const start = buf;
   ssize_t rv;
   struct mqtt_fixed_header fixed_header;
+  size_t remaining_length = 2u;
   size_t num_subs = 0;
   size_t i;
   const char *topic[MQTT_SUBSCRIBE_REQUEST_MAX_NUM_TOPICS];
@@ -1501,11 +1591,20 @@ ssize_t mqtt_pack_subscribe_request(uint8_t *buf, size_t bufsz,
   /* build the fixed header */
   fixed_header.control_type = MQTT_CONTROL_SUBSCRIBE;
   fixed_header.control_flags = 2u;
-  fixed_header.remaining_length = 2u; /* size of variable header */
-  for (i = 0; i < num_subs; ++i) {
-    /* payload is topic name + max qos (1 byte) */
-    fixed_header.remaining_length += __mqtt_packed_cstrlen(topic[i]) + 1;
+  if (num_subs == 0u) {
+    return MQTT_ERROR_MALFORMED_REQUEST;
   }
+  for (i = 0; i < num_subs; ++i) {
+    size_t topic_size = 0;
+    if (!mqtt_mqtt_string_size(topic[i], &topic_size)) {
+      return MQTT_ERROR_MALFORMED_REQUEST;
+    }
+    /* payload is topic name + max qos (1 byte) */
+    if (!mqtt_remaining_length_add(&remaining_length, topic_size + 1u)) {
+      return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+    }
+  }
+  fixed_header.remaining_length = (uint32_t)remaining_length;
 
   /* pack the fixed header */
   rv = mqtt_pack_fixed_header(buf, bufsz, &fixed_header);
@@ -1555,6 +1654,7 @@ ssize_t mqtt_pack_unsubscribe_request(uint8_t *buf, size_t bufsz,
   const uint8_t *const start = buf;
   ssize_t rv;
   struct mqtt_fixed_header fixed_header;
+  size_t remaining_length = 2u;
   size_t num_subs = 0;
   size_t i;
   const char *topic[MQTT_UNSUBSCRIBE_REQUEST_MAX_NUM_TOPICS];
@@ -1579,11 +1679,20 @@ ssize_t mqtt_pack_unsubscribe_request(uint8_t *buf, size_t bufsz,
   /* build the fixed header */
   fixed_header.control_type = MQTT_CONTROL_UNSUBSCRIBE;
   fixed_header.control_flags = 2u;
-  fixed_header.remaining_length = 2u; /* size of variable header */
-  for (i = 0; i < num_subs; ++i) {
-    /* payload is topic name */
-    fixed_header.remaining_length += __mqtt_packed_cstrlen(topic[i]);
+  if (num_subs == 0u) {
+    return MQTT_ERROR_MALFORMED_REQUEST;
   }
+  for (i = 0; i < num_subs; ++i) {
+    size_t topic_size = 0;
+    if (!mqtt_mqtt_string_size(topic[i], &topic_size)) {
+      return MQTT_ERROR_MALFORMED_REQUEST;
+    }
+    /* payload is topic name */
+    if (!mqtt_remaining_length_add(&remaining_length, topic_size)) {
+      return MQTT_ERROR_INVALID_REMAINING_LENGTH;
+    }
+  }
+  fixed_header.remaining_length = (uint32_t)remaining_length;
 
   /* pack the fixed header */
   rv = mqtt_pack_fixed_header(buf, bufsz, &fixed_header);
@@ -1645,26 +1754,29 @@ struct mqtt_queued_message *mqtt_mq_register(struct mqtt_message_queue *mq,
 }
 
 void mqtt_mq_clean(struct mqtt_message_queue *mq) {
-  struct mqtt_queued_message *new_head;
+  const ptrdiff_t length = mqtt_mq_length(mq);
+  ptrdiff_t remove_count = 0;
 
-  for (new_head = mqtt_mq_get(mq, 0); new_head >= mq->queue_tail; --new_head) {
-    if (new_head->state != MQTT_QUEUED_COMPLETE)
+  for (; remove_count < length; ++remove_count) {
+    if (mqtt_mq_get(mq, remove_count)->state != MQTT_QUEUED_COMPLETE) {
       break;
+    }
   }
 
   /* check if everything can be removed */
-  if (new_head < mq->queue_tail) {
+  if (remove_count == length) {
     mq->curr = (uint8_t *)mq->mem_start;
     mq->queue_tail = (struct mqtt_queued_message *)mq->mem_end;
     mq->curr_sz = (size_t)(mqtt_mq_currsz(mq));
     return;
-  } else if (new_head == mqtt_mq_get(mq, 0)) {
+  } else if (remove_count == 0) {
     /* do nothing */
     return;
   }
 
   /* move buffered data */
   {
+    auto new_head = mqtt_mq_get(mq, remove_count);
     size_t n = (size_t)(mq->curr - new_head->start);
     size_t removing = (size_t)(new_head->start - (uint8_t *)mq->mem_start);
     memmove(mq->mem_start, new_head->start, n);
@@ -1672,7 +1784,7 @@ void mqtt_mq_clean(struct mqtt_message_queue *mq) {
 
     /* move queue */
     {
-      const ptrdiff_t new_tail_idx = new_head - mq->queue_tail;
+      const ptrdiff_t new_tail_idx = length - remove_count - 1;
       memmove(mqtt_mq_get(mq, new_tail_idx), mq->queue_tail,
               sizeof(struct mqtt_queued_message) *
                   (size_t)((new_tail_idx + 1)));
@@ -1695,8 +1807,8 @@ struct mqtt_queued_message *
 mqtt_mq_find(const struct mqtt_message_queue *mq,
              enum MQTTControlPacketType control_type,
              const uint16_t *packet_id) {
-  struct mqtt_queued_message *curr;
-  for (curr = mqtt_mq_get(mq, 0); curr >= mq->queue_tail; --curr) {
+  for (ptrdiff_t i = 0; i < mqtt_mq_length(mq); ++i) {
+    auto curr = mqtt_mq_get(mq, i);
     if (curr->control_type == control_type) {
       if ((packet_id == nullptr && curr->state != MQTT_QUEUED_COMPLETE) ||
           (packet_id != nullptr && *packet_id == curr->packet_id)) {

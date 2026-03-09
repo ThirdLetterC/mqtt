@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) !void {
 
     const tests = try addExecutable(b, target, optimize, sanitize, .{
         .name = "tests",
-        .source = "tests.c",
+        .source = "testing/tests.c",
         .extra_cflags = &.{},
         .link_pthread = false,
         .link_openssl = false,

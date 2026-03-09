@@ -69,7 +69,7 @@ int main() {
 See `examples/` for complete programs using POSIX or OpenSSL sockets.
 
 **Tests**
-- `just test` or `zig build test` runs `tests.c`.
+- `just test` or `zig build test` runs `testing/tests.c`.
 - Tests and examples default to `test.mosquitto.org` and require network access.
 
 **Platform Abstraction**
@@ -85,7 +85,7 @@ cc -DMQTTC_PAL_FILE=my_mqtt_pal.h ...
 - `src/mqtt.c` core client.
 - `src/mqtt_pal.c` platform helpers.
 - `examples/` example clients.
-- `tests.c` unit and protocol tests.
+- `testing/tests.c` unit and protocol tests.
 
 **License**
 MIT. See `LICENSE`.

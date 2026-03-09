@@ -21,7 +21,7 @@ all: build-tests build-examples
 build-examples: simple-examples reconnect-examples openssl-examples
 
 build-tests: bin-dir
-    {{cc}} {{cflags}} tests.c {{sources}} {{msflags}} {{ldflags}} -o {{bindir}}/tests
+    {{cc}} {{cflags}} testing/tests.c {{sources}} {{msflags}} {{ldflags}} -o {{bindir}}/tests
 
 simple-examples: bin-dir
     for example in simple_publisher simple_subscriber; do {{cc}} {{cflags}} examples/${example}.c {{sources}} -lpthread {{msflags}} {{ldflags}} -o {{bindir}}/${example}; done
@@ -36,7 +36,7 @@ check: build-tests
     ./{{bindir}}/tests
 
 format:
-    clang-format -i --style=file src/*.c include/mqtt/mqtt.h examples/*.c examples/templates/*.h tests.c
+    clang-format -i --style=file src/*.c include/mqtt/mqtt.h examples/*.c examples/templates/*.h testing/tests.c
 
 fmt: format
 
